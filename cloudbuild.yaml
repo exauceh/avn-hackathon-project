@@ -1,19 +1,19 @@
-options:
-  logging: CLOUD_LOGGING_ONLY
-
 steps:
-  - name: 'gcr.io/cloud-builders/docker'
-    args: ['build', '-t', 'gcr.io/$PROJECT_ID/test-python-app', '.']
+- name: 'gcr.io/cloud-builders/docker'
+  id: Build-Image
+  args: 
+    - 'build'
+    - '-t'
+    - 'gcr.io/$PROJECT_ID/github.com/exauceh/gcpu_hackathon:$COMMIT_SHA'
+    - '.'
 
-  - name: 'gcr.io/cloud-builders/docker'
-    args: ['push', 'gcr.io/$PROJECT_ID/test-python-app']
+# Spécifiez le bucket des logs ici
+logsBucket: 'gs://gcpu-hackathon-2025-474123'
 
-  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
-    entrypoint: 'gcloud'
-    args:
-      [
-        'run', 'deploy', 'test-python-app',
-        '--image', 'gcr.io/$PROJECT_ID/test-python-app',
-        '--platform', 'managed',
-        '--region', 'europe-west1'
-      ]
+images:
+- 'gcr.io/$PROJECT_ID/github.com/exauceh/gcpu_hackathon:$COMMIT_SHA'
+
+# Raccordez votre build au compte de service que vous avez spécifié
+# dans le déclencheur (gcpu-hackathon@...)
+options:
+  serviceAccount: 'p

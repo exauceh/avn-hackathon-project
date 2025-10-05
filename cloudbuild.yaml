@@ -8,7 +8,7 @@ steps:
     - '.'
 
 # ÉTAPE AJOUTÉE : Déploiement sur Cloud Run
-- name: 'us-central1-docker.pkg.dev/cloud-sdk/cloud-sdk/gcloud'
+- name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
   args:
     - gcloud
     - run

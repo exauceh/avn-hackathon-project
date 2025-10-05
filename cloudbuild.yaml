@@ -1,13 +1,18 @@
 steps:
-- name: 'gcr.io/cloud-builders/docker' # C'est un builder standard, on le laisse
+- name: 'gcr.io/cloud-builders/docker'
   id: Build-Image
-  args: 
+  args:
     - 'build'
     - '-t'
-    - 'europe-west9-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/gcpu_hackathon:$COMMIT_SHA' # <-- 1. CHANGEMENT ICI
+    - 'europe-west9-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/gcpu_hackathon:$COMMIT_SHA'
     - '.'
 
-# ÉTAPE AJOUTÉE : Déploiement sur Cloud Run
+- name: 'gcr.io/cloud-builders/docker'
+  id: Push-Image
+  args:
+    - 'push'
+    - 'europe-west9-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/gcpu_hackathon:$COMMIT_SHA'
+
 - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
   args:
     - gcloud
@@ -15,11 +20,12 @@ steps:
     - deploy
     - gcpu-hackathon-2025
     - --image
-    - 'europe-west9-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/gcpu_hackathon:$COMMIT_SHA' # <-- 2. CHANGEMENT ICI
+    - 'europe-west9-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/gcpu_hackathon:$COMMIT_SHA'
     - --region
     - europe-west9
     - --platform
     - managed
+
 
 logsBucket: 'gs://gcpu-hackathon-logs-474123' 
 

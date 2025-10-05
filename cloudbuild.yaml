@@ -20,8 +20,7 @@ steps:
     - europe-west9 # <--- Vérifiez votre région (Paris)
     - --platform
     - managed
-    - --service-account
-    - gcpu-hackathon@gcpu-hackathon-2025-474123.iam.gserviceaccount.com # <--- ESSENTIEL
+
 
 
 # Spécifiez le bucket des logs ici

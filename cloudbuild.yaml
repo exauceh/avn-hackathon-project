@@ -7,22 +7,6 @@ steps:
     - 'gcr.io/$PROJECT_ID/github.com/exauceh/gcpu_hackathon:$COMMIT_SHA'
     - '.'
 
-# ÉTAPE AJOUTÉE : Déploiement sur Cloud Run
-- name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
-  args:
-    - gcloud
-    - run
-    - deploy
-    - gcpu-hackathon-2025 # <--- REMPLACEZ PAR LE NOM DU SERVICE
-    - --image
-    - 'gcr.io/$PROJECT_ID/github.com/exauceh/gcpu_hackathon:$COMMIT_SHA'
-    - --region
-    - europe-west9 # <--- Vérifiez votre région (Paris)
-    - --platform
-    - managed
-
-
-
 # Spécifiez le bucket des logs ici
 logsBucket: 'gs://gcpu-hackathon-logs-474123' # Utilisez le nom de votre bucket créé
 

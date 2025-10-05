@@ -8,7 +8,7 @@ steps:
     - '.'
 
 # Spécifiez le bucket des logs ici
-logsBucket: 'gs://VOTRE_NOM_DE_BUCKET' # Utilisez le nom de votre bucket créé
+logsBucket: 'gs://gcpu-hackathon-2025-47412' # Utilisez le nom de votre bucket créé
 
 images:
 - 'gcr.io/$PROJECT_ID/github.com/exauceh/gcpu_hackathon:$COMMIT_SHA'

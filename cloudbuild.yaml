@@ -8,7 +8,7 @@ steps:
     - '.'
 
 # Spécifiez le bucket des logs ici
-logsBucket: 'gs://gcpu-hackathon-2025-474123'
+logsBucket: 'gs://VOTRE_NOM_DE_BUCKET'
 
 images:
 - 'gcr.io/$PROJECT_ID/github.com/exauceh/gcpu_hackathon:$COMMIT_SHA'
@@ -16,4 +16,4 @@ images:
 # Raccordez votre build au compte de service que vous avez spécifié
 # dans le déclencheur (gcpu-hackathon@...)
 options:
-  serviceAccount: 'p
+  serviceAccount: 'projects/$PROJECT_ID/serviceAccounts/gcpu-hackathon@gcpu-hackathon-2025-474123.iam.gserviceaccount.com'

@@ -89,3 +89,6 @@ gcloud run deploy $SERVICE_NAME \
      --quiet
 ```
 
+Le lien de l'app est dispo sur Cloud Run dans le cloud
+
+

@@ -86,3 +86,4 @@ gcloud run deploy $SERVICE_NAME `
     --port 8080 `
     --quiet
 ```
+Le lien de l'app est dispo sur Cloud Run dans le cloud

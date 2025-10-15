@@ -10,7 +10,6 @@ COPY . .
 # Installe Flask pour créer un mini serveur web
 RUN pip install --no-cache-dir -r requirements.txt
 
-
 ENV FLASK_APP=src/main.py
 # Définit la variable d'environnement du port (Cloud Run utilise $PORT)
 ENV PORT=8080

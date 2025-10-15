@@ -50,6 +50,7 @@ coverage.xml
 .hypothesis/
 .pytest_cache/
 cover/
+package-lock.json
 
 # Translations
 *.mo
@@ -66,3 +67,5 @@ ENV/
 env.bak/
 venv.bak/
 
+google-cloud-sdk/
+cloud/keys

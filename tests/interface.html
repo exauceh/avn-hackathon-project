@@ -1,0 +1,848 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agent ML - Simulation</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background-color: #ffffff;
+            color: #374151;
+            line-height: 1.6;
+            font-size: 14px;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .app-layout {
+            display: flex;
+            height: 100vh;
+        }
+
+        /* Sidebar historique à gauche */
+        .sidebar {
+            width: 280px;
+            background-color: #f9fafb;
+            border-right: 1px solid #e5e7eb;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .sidebar-header {
+            padding: 16px;
+            border-bottom: 1px solid #e5e7eb;
+            background-color: #ffffff;
+        }
+
+        .sidebar-title {
+            font-weight: 600;
+            color: #111827;
+            font-size: 16px;
+            margin-bottom: 8px;
+        }
+
+        .sidebar-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        .sidebar-content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 8px;
+        }
+
+        .history-item {
+            background-color: #ffffff;
+            border: 1px solid #e5e7eb;
+            border-radius: 6px;
+            padding: 12px;
+            margin-bottom: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .history-item:hover {
+            background-color: #f3f4f6;
+            border-color: #d1d5db;
+        }
+
+        .history-item.selected {
+            background-color: #eff6ff;
+            border-color: #3b82f6;
+        }
+
+        .history-question {
+            font-size: 13px;
+            color: #374151;
+            font-weight: 500;
+            margin-bottom: 4px;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            line-clamp: 2;
+            overflow: hidden;
+        }
+
+        .history-metadata {
+            font-size: 11px;
+            color: #6b7280;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .history-source {
+            background-color: #f3f4f6;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 10px;
+        }
+
+        .empty-history {
+            text-align: center;
+            color: #9ca3af;
+            font-size: 13px;
+            padding: 20px;
+            font-style: italic;
+        }
+
+        /* Zone principale */
+        .main-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .main-header {
+            padding: 20px 24px;
+            border-bottom: 1px solid #e5e7eb;
+            background-color: #ffffff;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .header-content h1 {
+            color: #111827;
+            font-size: 24px;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+
+        .header-content p {
+            color: #6b7280;
+            font-size: 14px;
+        }
+
+        .header-controls {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .interval-control {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 12px;
+            background-color: #f9fafb;
+            border: 1px solid #e5e7eb;
+            border-radius: 6px;
+        }
+
+        .interval-label {
+            font-size: 13px;
+            color: #6b7280;
+            font-weight: 500;
+        }
+
+        .interval-input {
+            width: 60px;
+            padding: 4px 6px;
+            border: 1px solid #d1d5db;
+            border-radius: 4px;
+            font-size: 13px;
+            text-align: center;
+        }
+
+        .content-area {
+            flex: 1;
+            padding: 24px;
+            overflow-y: auto;
+        }
+
+        .simulation-container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .input-section, .output-section {
+            background-color: #ffffff;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            padding: 20px;
+        }
+
+        .section-title {
+            font-weight: 600;
+            color: #111827;
+            margin-bottom: 15px;
+            font-size: 16px;
+        }
+
+        .question-display {
+            background-color: #f9fafb;
+            border: 1px solid #e5e7eb;
+            border-radius: 6px;
+            padding: 15px;
+            margin-bottom: 15px;
+            min-height: 80px;
+        }
+
+        .question-text {
+            font-size: 14px;
+            color: #374151;
+            line-height: 1.5;
+        }
+
+        .response-display {
+            background-color: #f9fafb;
+            border: 1px solid #e5e7eb;
+            border-radius: 6px;
+            padding: 15px;
+            min-height: 120px;
+        }
+
+        .response-text {
+            font-size: 14px;
+            color: #374151;
+            line-height: 1.5;
+            margin-bottom: 10px;
+        }
+
+        .response-metadata {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px solid #e5e7eb;
+            font-size: 12px;
+        }
+
+        .metadata-item {
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .metadata-label {
+            color: #6b7280;
+        }
+
+        .metadata-value {
+            color: #374151;
+            font-weight: 500;
+        }
+
+        .controls {
+            background-color: #ffffff;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            padding: 20px;
+            text-align: center;
+        }
+
+        .btn {
+            background-color: #374151;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            margin: 0 5px;
+            transition: background-color 0.2s;
+        }
+
+        .btn:hover {
+            background-color: #1f2937;
+        }
+
+        .btn:disabled {
+            background-color: #9ca3af;
+            cursor: not-allowed;
+        }
+
+        .btn-secondary {
+            background-color: #6b7280;
+        }
+
+        .btn-secondary:hover {
+            background-color: #4b5563;
+        }
+
+        .btn-sm {
+            padding: 6px 12px;
+            font-size: 12px;
+        }
+
+        .status-indicator {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+
+        .status-active {
+            background-color: #10b981;
+        }
+
+        .status-inactive {
+            background-color: #ef4444;
+        }
+
+        .status-bar {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 15px 0;
+            font-size: 13px;
+            color: #6b7280;
+        }
+
+        .question-counter {
+            position: absolute;
+            top: 10px;
+            right: 15px;
+            background-color: #e5e7eb;
+            color: #374151;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 500;
+        }
+
+        .input-section {
+            position: relative;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            color: #6b7280;
+            font-style: italic;
+        }
+
+        /* Styles pour l'historique */
+        .history-section {
+            background-color: #ffffff;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            padding: 20px;
+            margin-top: 20px;
+        }
+
+        .history-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .history-list {
+            max-height: 300px;
+            overflow-y: auto;
+            border: 1px solid #e5e7eb;
+            border-radius: 6px;
+        }
+
+        .history-item {
+            padding: 12px 15px;
+            border-bottom: 1px solid #f3f4f6;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        .history-item:hover {
+            background-color: #f9fafb;
+        }
+
+        .history-item:last-child {
+            border-bottom: none;
+        }
+
+        .history-question {
+            font-weight: 500;
+            color: #374151;
+            margin-bottom: 5px;
+        }
+
+        .history-response {
+            color: #6b7280;
+            font-size: 13px;
+            margin-bottom: 5px;
+        }
+
+        .history-meta {
+            display: flex;
+            justify-content: between;
+            font-size: 11px;
+            color: #9ca3af;
+        }
+
+        .history-meta span {
+            margin-right: 15px;
+        }
+
+        /* Styles pour les paramètres */
+        .settings-section {
+            background-color: #ffffff;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+
+        .settings-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 10px;
+        }
+
+        .settings-label {
+            font-weight: 500;
+            color: #374151;
+        }
+
+        .settings-input {
+            padding: 6px 10px;
+            border: 1px solid #e5e7eb;
+            border-radius: 4px;
+            width: 80px;
+            text-align: center;
+        }
+
+        .empty-history {
+            text-align: center;
+            color: #9ca3af;
+            padding: 30px;
+            font-style: italic;
+        }
+
+        @media (max-width: 768px) {
+            .simulation-container {
+                grid-template-columns: 1fr;
+            }
+            
+            .settings-row {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 5px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="app-layout">
+        <!-- Sidebar historique à gauche -->
+        <div class="sidebar">
+            <div class="sidebar-header">
+                <div class="sidebar-title">Historique</div>
+                <div class="sidebar-actions">
+                    <button class="btn btn-secondary btn-sm" onclick="clearHistory()">Vider</button>
+                </div>
+            </div>
+            <div class="sidebar-content">
+                <div class="history-list" id="historyList">
+                    <div class="empty-history">Aucune conversation pour le moment</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Zone principale -->
+        <div class="main-content">
+            <div class="main-header">
+                <div class="header-content">
+                    <h1>Agent ML - Équipe A</h1>
+                    <p>Simulation de traitement automatique des questions</p>
+                </div>
+                <div class="header-controls">
+                    <div class="interval-control">
+                        <span class="interval-label">Intervalle:</span>
+                        <input type="number" id="autoInterval" class="interval-input" value="3" min="1" max="60" 
+                               onchange="updateAutoInterval()">
+                        <span class="interval-label">s</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="content-area">
+                <div class="simulation-container">
+                    <div class="input-section">
+                        <div class="question-counter" id="questionCounter">Question #0</div>
+                        <div class="section-title">Équipe C → Équipe A</div>
+                        <div class="question-display">
+                            <div class="question-text" id="currentQuestion">En attente de la première question...</div>
+                        </div>
+                        <div class="status-bar">
+                            <span class="status-indicator status-inactive" id="inputStatus"></span>
+                            <span id="inputStatusText">Arrêté</span>
+                        </div>
+                    </div>
+
+                    <div class="output-section">
+                        <div class="section-title">Équipe A → Équipe B</div>
+                        <div class="response-display">
+                            <div class="response-text" id="responseText">Aucune réponse générée</div>
+                            <div class="response-metadata">
+                                <div class="metadata-item">
+                                    <span class="metadata-label">Intent:</span>
+                                    <span class="metadata-value" id="intentValue">-</span>
+                                </div>
+                                <div class="metadata-item">
+                                    <span class="metadata-label">Confiance:</span>
+                                    <span class="metadata-value" id="confidenceValue">-</span>
+                                </div>
+                                <div class="metadata-item">
+                                    <span class="metadata-label">Action:</span>
+                                    <span class="metadata-value" id="actionValue">-</span>
+                                </div>
+                                <div class="metadata-item">
+                                    <span class="metadata-label">Temps:</span>
+                                    <span class="metadata-value" id="processingTime">-</span>
+                                </div>
+                                <div class="metadata-item">
+                                    <span class="metadata-label">Réponse:</span>
+                                    <span class="metadata-value" id="responseTime">-</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="status-bar">
+                            <span class="status-indicator status-inactive" id="outputStatus"></span>
+                            <span id="outputStatusText">En attente</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Mode manuel -->
+                <div class="controls" style="margin-bottom: 20px;">
+                    <div style="margin-bottom: 15px;">
+                        <input type="text" id="manualQuestion" placeholder="Saisir une question manuellement..." 
+                               style="width: 60%; padding: 8px 12px; border: 1px solid #e5e7eb; border-radius: 6px; margin-right: 10px;">
+                        <button class="btn" onclick="sendManualQuestion()">Envoyer</button>
+                    </div>
+                </div>
+
+                <!-- Mode automatique -->
+                <div class="controls">
+                    <button class="btn" id="startBtn" onclick="startSimulation()">Démarrer Simulation Auto</button>
+                    <button class="btn btn-secondary" id="stopBtn" onclick="stopSimulation()" disabled>Arrêter</button>
+                    <button class="btn btn-secondary" onclick="sendSingleQuestion()">Question Aléatoire</button>
+                </div>
+
+                <div class="loading" id="loadingIndicator">
+                    Traitement en cours avec Gemini AI...
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let simulationInterval = null;
+        let questionCount = 0;
+        let isRunning = false;
+        let autoIntervalMs = 3000; // Intervalle en millisecondes
+        let conversationHistory = [];
+
+        // Fonctions pour la gestion de l'historique
+        async function loadHistory() {
+            try {
+                const response = await fetch('/api/history');
+                const data = await response.json();
+                conversationHistory = data.history || [];
+                updateHistoryDisplay();
+            } catch (error) {
+                console.error('Erreur chargement historique:', error);
+            }
+        }
+
+        function updateHistoryDisplay() {
+            const historyList = document.getElementById('historyList');
+            
+            if (conversationHistory.length === 0) {
+                historyList.innerHTML = '<div class="empty-history">Aucune conversation pour le moment</div>';
+                return;
+            }
+
+            // Afficher les conversations les plus récentes en premier
+            const recentHistory = [...conversationHistory].reverse();
+            
+            historyList.innerHTML = recentHistory.map(item => `
+                <div class="history-item" onclick="loadHistoryItem(${item.id})">
+                    <div class="history-question">${item.question}</div>
+                    <div class="history-metadata">
+                        <span class="history-source">${item.source === 'manual' ? 'Manuel' : 'Auto'}</span>
+                        <span>${new Date(item.timestamp).toLocaleTimeString()}</span>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function loadHistoryItem(itemId) {
+            const item = conversationHistory.find(h => h.id === itemId);
+            if (!item) return;
+
+            // Charger la question et réponse dans l'interface principale
+            document.getElementById('currentQuestion').textContent = item.question;
+            document.getElementById('responseText').textContent = item.response;
+            document.getElementById('intentValue').textContent = item.intent;
+            document.getElementById('confidenceValue').textContent = `${Math.round(item.confidence * 100)}%`;
+            document.getElementById('actionValue').textContent = item.action;
+            document.getElementById('responseTime').textContent = item.response_time ? `${item.response_time}ms` : '-';
+        }
+
+        async function clearHistory() {
+            if (!confirm('Voulez-vous vraiment vider l\'historique ?')) return;
+
+            try {
+                await fetch('/api/history/clear', { method: 'POST' });
+                conversationHistory = [];
+                updateHistoryDisplay();
+            } catch (error) {
+                console.error('Erreur lors du vidage de l\'historique:', error);
+                alert('Erreur lors du vidage de l\'historique');
+            }
+        }
+
+        // Fonction pour mettre à jour l'intervalle automatique
+        function updateAutoInterval() {
+            const intervalInput = document.getElementById('autoInterval');
+            const newInterval = parseInt(intervalInput.value);
+            
+            if (newInterval >= 1 && newInterval <= 60) {
+                autoIntervalMs = newInterval * 1000;
+                
+                // Si la simulation est en cours, la redémarrer avec le nouvel intervalle
+                if (isRunning) {
+                    stopSimulation();
+                    setTimeout(startSimulation, 100);
+                }
+                
+                // Mettre à jour le texte de statut
+                if (isRunning) {
+                    document.getElementById('inputStatusText').textContent = `En cours (${newInterval}s)`;
+                }
+            } else {
+                // Remettre la valeur précédente si invalide
+                intervalInput.value = Math.round(autoIntervalMs / 1000);
+            }
+        }
+
+        async function startSimulation() {
+            if (isRunning) return;
+            
+            isRunning = true;
+            document.getElementById('startBtn').disabled = true;
+            document.getElementById('stopBtn').disabled = false;
+            
+            // Mettre à jour le statut
+            updateStatus(true);
+            
+            // Envoyer une première question immédiatement
+            await sendQuestion();
+            
+            // Puis continuer selon l'intervalle configuré
+            simulationInterval = setInterval(sendQuestion, autoIntervalMs);
+        }
+
+        function stopSimulation() {
+            if (!isRunning) return;
+            
+            isRunning = false;
+            document.getElementById('startBtn').disabled = false;
+            document.getElementById('stopBtn').disabled = true;
+            
+            if (simulationInterval) {
+                clearInterval(simulationInterval);
+                simulationInterval = null;
+            }
+            
+            updateStatus(false);
+        }
+
+        function updateStatus(active) {
+            const statusIndicator = document.getElementById('inputStatus');
+            const statusText = document.getElementById('inputStatusText');
+            
+            if (active) {
+                statusIndicator.className = 'status-indicator status-active';
+                const intervalSeconds = Math.round(autoIntervalMs / 1000);
+                statusText.textContent = `En cours (${intervalSeconds}s)`;
+            } else {
+                statusIndicator.className = 'status-indicator status-inactive';
+                statusText.textContent = 'Arrêté';
+            }
+        }
+
+        async function sendSingleQuestion() {
+            await sendQuestion();
+        }
+
+        async function sendQuestion() {
+            try {
+                // Afficher l'indicateur de chargement
+                document.getElementById('loadingIndicator').style.display = 'block';
+                
+                // Obtenir une question aléatoire
+                const questionResponse = await fetch('/api/random-question');
+                const questionData = await questionResponse.json();
+                
+                if (questionData.error) {
+                    throw new Error(questionData.error);
+                }
+                
+                questionCount++;
+                document.getElementById('questionCounter').textContent = `Question #${questionCount}`;
+                document.getElementById('currentQuestion').textContent = questionData.text;
+                
+                // Envoyer la question à l'agent ML
+                const startTime = Date.now();
+                const response = await fetch('/api/process-question', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ text: questionData.text, source: 'auto' })
+                });
+                
+                const result = await response.json();
+                const responseTime = Date.now() - startTime;
+                
+                if (result.error) {
+                    throw new Error(result.error);
+                }
+                
+                // Afficher la réponse
+                displayResponse(result, responseTime);
+                
+                // Recharger l'historique
+                await loadHistory();
+                
+            } catch (error) {
+                console.error('Erreur:', error);
+                document.getElementById('responseText').textContent = `Erreur: ${error.message}`;
+                document.getElementById('intentValue').textContent = 'error';
+                document.getElementById('confidenceValue').textContent = '0%';
+                document.getElementById('actionValue').textContent = 'retry';
+                document.getElementById('responseTime').textContent = '-';
+            } finally {
+                // Masquer l'indicateur de chargement
+                document.getElementById('loadingIndicator').style.display = 'none';
+            }
+        }
+
+        async function sendManualQuestion() {
+            const input = document.getElementById('manualQuestion');
+            const question = input.value.trim();
+            
+            if (!question) {
+                alert('Veuillez saisir une question');
+                return;
+            }
+            
+            try {
+                // Afficher la question saisie
+                questionCount++;
+                document.getElementById('questionCounter').textContent = `Question #${questionCount}`;
+                document.getElementById('currentQuestion').textContent = question;
+                
+                // Vider le champ de saisie
+                input.value = '';
+                
+                // Traiter la question
+                await processQuestionDirect(question, 'manual');
+                
+            } catch (error) {
+                console.error('Erreur question manuelle:', error);
+                alert('Erreur lors du traitement de la question');
+            }
+        }
+
+        async function processQuestionDirect(questionText, source = 'manual') {
+            try {
+                // Afficher l'indicateur de chargement
+                document.getElementById('loadingIndicator').style.display = 'block';
+                
+                const startTime = Date.now();
+                const response = await fetch('/api/process-question', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ text: questionText, source: source })
+                });
+                
+                const result = await response.json();
+                const responseTime = Date.now() - startTime;
+                
+                if (result.error) {
+                    throw new Error(result.error);
+                }
+                
+                // Afficher la réponse
+                displayResponse(result, responseTime);
+                
+                // Recharger l'historique
+                await loadHistory();
+                
+            } catch (error) {
+                console.error('Erreur:', error);
+                document.getElementById('responseText').textContent = `Erreur: ${error.message}`;
+                document.getElementById('intentValue').textContent = 'error';
+                document.getElementById('confidenceValue').textContent = '0%';
+                document.getElementById('actionValue').textContent = 'retry';
+                document.getElementById('responseTime').textContent = '-';
+            } finally {
+                // Masquer l'indicateur de chargement
+                document.getElementById('loadingIndicator').style.display = 'none';
+            }
+        }
+
+        function displayResponse(result, responseTime) {
+            document.getElementById('responseText').textContent = result.response || 'Aucune réponse';
+            document.getElementById('intentValue').textContent = result.intent || '-';
+            document.getElementById('confidenceValue').textContent = 
+                result.confidence ? `${Math.round(result.confidence * 100)}%` : '-';
+            document.getElementById('actionValue').textContent = result.action || '-';
+            document.getElementById('responseTime').textContent = `${responseTime}ms`;
+        }
+
+        // Gestion de la touche Entrée pour l'input manuel
+        document.addEventListener('DOMContentLoaded', function() {
+            updateStatus(false);
+            loadHistory(); // Charger l'historique au démarrage
+            
+            document.getElementById('manualQuestion').addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    sendManualQuestion();
+                }
+            });
+        });
+    </script>
+</body>
+</html>

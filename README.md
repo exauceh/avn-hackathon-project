@@ -61,70 +61,87 @@ pip install -r requirements.txt
    - Placer le fichier JSON du service account dans le dossier racine
    - Créer le fichier `.env` avec la configuration ci-dessus
 
+### Tests et Utilisation
+
+#### Interface Web (Recommandé)
+```bash
+# Lancer l'interface web complète
+python tests/server.py
+```
+Puis ouvrir http://localhost:5000
+
+**Fonctionnalités disponibles :**
+- Mode automatique : Questions aléatoires à intervalles configurables
+- Mode manuel : Saisie directe de questions
+- Historique conversationnel avec sidebar
+- Contrôles de timing en temps réel
+- API REST pour intégration
+
+#### Tests en ligne de commande
+```bash
+# Test unitaire de l'agent ML
+python tests/test_agent.py
+
+# Test programmatique direct
+python -c "
+from core.agents.ml_agent import PlanningAgent
+agent = PlanningAgent()
+result = agent.process_voice_input({'text': 'Quelle est la météo ?'})
+print(f'Intent: {result.intent}, Action: {result.action}')
+"
+```
+
 ## Structure du Projet
 
 ```
 avn-hackathon-project/
 ├── core/
 │   ├── agents/
-│   │   ├── ml_agent.py            # Agent principal ML
+│   │   ├── ml_agent.py            # Agent principal ML avec Gemini
 │   │   ├── credentials.py         # Gestionnaire GCP
-│   │   └── voice_input_mock.py    # Mock équipe C pour tests
+│   │   ├── voice_input_mock.py    # Mock équipe C pour simulation
+│   │   └── README.md              # Documentation technique détaillée
 ├── tests/
-│   └── test_ml_agent.py           # Tests de l'agent
+│   ├── interface.html             # Interface web avec sidebar historique
+│   ├── server.py                  # Serveur Flask avec API REST
+│   └── test_agent.py              # Tests unitaires
 ├── requirements.txt               # Dépendances Python
 ├── Dockerfile                     # Configuration Docker
 ├── cloudbuild.yaml               # CI/CD Google Cloud
 └── .env                          # Configuration (à créer)
 ```
 
-## Utilisation
-
-### Test de l'Agent
-
-```bash
-python -m tests.test_ml_agent
-```
-
-### Utilisation Programmatique
-
-```python
-from core.agents.ml_agent import PlanningAgent
-
-# Initialiser l'agent
-agent = PlanningAgent()
-
-# Traiter une entrée vocale
-voice_input = {"text": "Quelle est la météo aujourd'hui ?"}
-result = agent.process_voice_input(voice_input)
-
-print(f"Intent: {result.intent}")
-print(f"Action: {result.action}")
-```
-
 ## Technologies Utilisées
 
-- **Google Vertex AI / Gemini 2.0** : Traitement du langage naturel
-- **Python Flask** : Framework web
-- **Google Cloud Pub/Sub** : Communication inter-équipes
-- **Docker** : Conteneurisation
-- **Google Cloud Build** : CI/CD
+- **Google Vertex AI / Gemini AI** : Traitement du langage naturel et génération de réponses
+- **Python Flask** : Serveur web et API REST
+- **HTML/CSS/JavaScript** : Interface web professionnelle
+- **Git** : Contrôle de version avec branches feature
+- **Google Cloud Platform** : Infrastructure et authentification
 
 ## Développement
 
-### Sprints
+### État Actuel (Sprint 1 - Terminé)
 
-Le projet est organisé en 4 sprints (voir `sprints_file.txt` pour les détails).
+**Agent ML fonctionnel** avec Gemini AI intégré
+**Interface web complète** avec historique conversationnel  
+**Tests unitaires** avec suppression des warnings GCP
+**Documentation** technique exhaustive
+**API REST** pour intégration future avec équipes B et C
 
-### Tests
+### Structure de Tests
 
-```bash
-# Exécuter tous les tests
-python -m pytest tests/
+#### Interface Web (`tests/server.py` + `tests/interface.html`)
+- Serveur Flask avec endpoints API
+- Interface style Claude AI avec sidebar historique
+- Modes automatique et manuel
+- Gestion des intervalles de timing configurables
+- Stockage local des conversations (50 dernières)
 
-# Test spécifique de l'agent
-python -m tests.test_ml_agent
-```
+#### Tests Unitaires (`tests/test_agent.py`)
+- Tests de l'agent ML avec validation des réponses
+- Suppression des warnings Google Cloud
+- Validation de la configuration GCP
 
 ### Déploiement
 
@@ -156,21 +173,37 @@ gcloud builds submit --config cloudbuild.yaml
 - gemini-2.5-flash
 - gemini-2.5-pro
 
-## Équipe A - Responsabilités
 
-### Modules Assignés
+### Deliverables Sprint 1 - Réalisés
 
-- **3.1** : Réception des données équipe C
-- **3.2** : Traitement ML avec Gemini
-- **3.5** : Génération des intents structurés
-- **3.6** : Communication avec équipe B
+- **Agent de planification ML** : Intégration complète Gemini AI avec gestion des intentions
+- **Interface web professionnelle** : Simulation temps réel avec historique conversationnel
+- **Tests complets** : Unitaires (ligne de commande) + Interface web interactive
+- **Documentation technique** : Setup GCP, configuration
+- **Architecture sécurisée** : Credentials protégés, warnings supprimés 
+- **API REST** : Endpoints pour historique, questions et traitement ML
 
-### Deliverables Sprint 1
+### API Endpoints Disponibles
 
-- Agent de planification fonctionnel
-- Intégration Gemini AI
-- Tests unitaires
-- Documentation technique
+L'interface web expose plusieurs endpoints REST pour l'intégration future :
+
+- `GET /` : Interface web principale
+- `GET /api/history` : Récupération de l'historique des conversations
+- `POST /api/history/clear` : Vider l'historique
+- `GET /api/random-question` : Génération de question aléatoire
+- `POST /api/process-question` : Traitement d'une question par l'agent ML
+- `GET /api/status` : Statut du serveur et configuration
+
+**Format de réponse type :**
+```json
+{
+  "intent": "weather_query",
+  "action": "get_weather_info", 
+  "confidence": 0.95,
+  "response": "Je peux vous aider avec la météo...",
+  "processing_time_ms": 150
+}
+```
 
 ## Dépannage
 
@@ -181,10 +214,6 @@ gcloud builds submit --config cloudbuild.yaml
 - Confirmer les permissions du service account
 - Vérifier la région configurée
 
-**Credentials manquants**
-- Vérifier le fichier `.env`
-- Confirmer le chemin vers le fichier JSON
-- Tester avec `python -m tests.test_ml_agent`
 
 ## Contact
 

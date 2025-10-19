@@ -1,0 +1,23 @@
+{
+  "name": "frontend",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"No tests yet, define your test script here\" && exit 0",
+    "start": "echo \"No start script yet, define your dev server or build watch here\"",
+    "build:dev": "echo \"Define your development build script here\"",
+    "build:prod": "echo \"Define your production build script here\"",
+    "stt:test": "GOOGLE_APPLICATION_CREDENTIALS=../cloud/keys/voice-io-service-account.json node test_stt.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@google-cloud/pubsub": "^5.2.0",
+    "@google-cloud/speech": "^7.2.1",
+    "@google-cloud/text-to-speech": "^6.3.1",
+    "axios": "^1.12.2",
+    "dotenv": "^17.2.3"
+  }
+}

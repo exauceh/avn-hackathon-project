@@ -112,29 +112,6 @@ tests/
 - `GET /api/random-question` : Question aléatoire
 - `POST /api/process-question` : Traitement par IA
 
-## Gestion des coûts et ressources
-
-### Facturation Google Cloud
-- **Vertex AI Gemini** : Facturé par token de requête/réponse uniquement
-- **Pas de services permanents** : Aucun coût en arrière-plan
-- **Coût estimé** : ~0.001€ par question-réponse (très faible)
-
-### Surveillance des coûts
-1. **Google Cloud Console** > "Facturation" > "Budgets et alertes"
-2. Créer une alerte à 5€/mois pour être prévenu
-3. Monitoring usage : Cloud Console > "Vertex AI" > "Quotas"
-
-### Arrêt du projet
-**Rien à arrêter !** Le projet n'utilise que des APIs à la demande :
-- Pas de VM, clusters ou services permanents
-- Pas de base de données cloud
-- Coût = 0€ quand non utilisé
-
-### Optimisation des coûts
-- Limiter l'intervalle automatique pour réduire les appels
-- Mode manuel pour contrôler précisément l'usage
-- Historique local (pas de stockage cloud)
-
 ## Sécurité
 - Fichier JSON dans .gitignore
 - Variables sensibles dans .env (pas dans le code)

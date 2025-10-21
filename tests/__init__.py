@@ -1,1 +1,0 @@
-# Package de tests pour le projet AVN - Équipe A

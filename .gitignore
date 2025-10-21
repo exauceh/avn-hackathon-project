@@ -3,6 +3,9 @@ __pycache__/
 *.py[codz]
 *$py.class
 
+# Fichiers de données/mémoire de l'agent
+core/agents/data/conversation_memory.txt
+
 # C extensions
 *.so
 

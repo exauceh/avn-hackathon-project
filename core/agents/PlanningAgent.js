@@ -72,7 +72,7 @@ class PlanningAgent {
             if (this.geminiAvailable) {
                 plan = await this.generatePlanWithGemini(command);
             } else {
-                plan = this.generateBasicPlan(command);
+                plan = this.createErrorPlan('IA non disponible - configuration GCP requise');
             }
 
             // Sauvegarder l'interaction dans la mémoire
@@ -84,7 +84,16 @@ class PlanningAgent {
         } catch (error) {
             this.stats.failed_plans++;
             console.error('Erreur traitement commande:', error.message);
-            return this.createErrorPlan(error.message);
+            const errorPlan = this.createErrorPlan(error.message);
+            
+            // Sauvegarder aussi les erreurs dans la mémoire
+            try {
+                await this.memory.addInteraction(command, errorPlan);
+            } catch (memoryError) {
+                console.error('Erreur sauvegarde mémoire:', memoryError.message);
+            }
+            
+            return errorPlan;
         }
     }
 
@@ -110,194 +119,271 @@ class PlanningAgent {
 
         } catch (error) {
             console.error('Erreur Gemini:', error.message);
-            return this.generateBasicPlan(command);
+            return this.createErrorPlan(error.message);
         }
     }
 
     /**
      * Construit le prompt pour Gemini avec contexte de mémoire
      */
-    async buildPrompt(command) {
+    async buildPrompt(userInput) {
         const memoryContext = await this.memory.getRecentContext();
 
-        return `Tu es un agent de planification. Tu dois générer UN OBJET JSON strict qui décrit un plan ordonné pour l'orchestrateur web.
+        // Construction du prompt pour Sprint 1.2 - Planification sans DOM
+        const prompt = `Tu es un agent planificateur intelligent pour assistant vocal (Sprint 1.2).
 
-CONTEXTE MEMOIRE (analyses récentes):
+MISSION: Analyser les commandes utilisateur et générer des plans d'action structurés SANS INTERACTION DOM.
+
+CONTEXTE DE CONVERSATION:
 ${memoryContext}
 
-COMMANDE ACTUELLE: "${command}"
+ACTIONS DISPONIBLES (Sprint 1.2 - Simplifiées):
+- get_weather: Obtenir météo (location: string, unit?: "celsius"|"fahrenheit")
+- get_time: Obtenir heure (timezone?: string, format?: "12h"|"24h")
+- search_web: Rechercher sur web (query: string, max_results?: number)
+- open_website: Ouvrir site web (url: string, description?: string)
+- calculate: Calculer expression (expression: string, precision?: number)
+- translate_text: Traduire texte (text: string, from_lang: string, to_lang: string)
+- analyze_text: Analyser contenu textuel (text: string, analysis_type?: "sentiment"|"summary"|"keywords")
+- manage_bookmarks: Gérer favoris (action: "add"|"remove"|"list", url?: string, title?: string)
+- download_page: Télécharger page (url?: string, format: "html"|"pdf"|"text", filename: string)
+- ask_clarification: Demander précision (question: string, context?: string)
+- limit_acknowledgment: Reconnaître limitation (limitation: string, suggestion?: string)
+- chain_actions: Enchaîner plusieurs actions (sequence_type: "parallel"|"sequential")
 
-ANALYSE DU CONTEXTE: 
-- Vérifier dans le contexte mémoire s'il y a des extractions DOM récentes (extract_dom, extract_page_info)
-- Si une extraction similaire a été faite récemment, utiliser ces informations pour planifier directement
-- Si aucune extraction pertinente dans l'historique, alors planifier une nouvelle extraction DOM
-- IMPORTANT: Le planificateur extrait le DOM, ne l'analyse pas. L'analyse est faite par d'autres agents.
-
-FORMAT REQUIS (EXACT):
+FORMAT REQUIS:
 {
-    "intent": "mot_cle_court",
-    "actions": {
-        "1": "action_1",
-        "2": "action_2"
+  "intent": "keyword_describing_user_goal",
+  "action": "action_name",
+  "arguments": {
+    "param1": "value1",
+    "param2": "value2"
+  }
+}
+
+FORMAT POUR PLANS MULTI-ACTIONS:
+{
+    "1": {
+        "intent": "keyword_describing_user_goal",
+        "action": "action1",
+        "arguments": { /* args for action1 */ }
     },
-    "arguments": {
-        "1": {"param1": "valeur1"},
-        "2": {"param2": "valeur2"}
+    "2": {
+        "intent": "keyword_describing_user_goal",
+        "action": "action2", 
+        "arguments": { /* args for action2 */ }
     }
 }
 
-REGLES STRICTES: 
-- intent doit être un mot-clé court (1-3 mots)
-- actions: dictionnaire numéroté des actions dans l'ordre d'exécution (1, 2, 3...)
-- arguments: dictionnaire numéroté correspondant aux actions (même numéros)
-- JAMAIS d'à priori sur les paramètres (pas de pixels, sélecteurs, éléments supposés)
-- VERIFIER L'HISTORIQUE/MEMOIRE : si extract_dom ou extract_page_info déjà fait récemment, utiliser ces infos
-- Si DOM déjà extrait récemment → planifier directement les actions avec les infos disponibles
-- Si paramètres manquants ET pas d'extraction récente → extraire DOM puis utiliser "plan_next_steps"
-- Plans peuvent être complets (multi-actions) ou partiels (extraction puis rebouclage)
-- Le planificateur PLANIFIE seulement, ne répond pas aux questions (utiliser speak_to_user pour ça)
+EXEMPLES DE PLANIFICATION (Simplifiés):
 
-ACTIONS DISPONIBLES:
-- scroll_page: { direction: "up|down", amount: "small|medium|large" }
-- click_element: { text: "texte visible exact", selector: "CSS selector si connu" }
-- type_text: { text: "texte à saisir", selector: "CSS selector si connu" }
-- navigate_to: { url: "https://..." }
-- extract_dom: { target: "buttons|forms|links|sections", search_text: "texte recherché" } (extraire structure DOM)
-- extract_page_info: { focus: "all|scroll_info|forms|navigation" } (extraire infos de page)
-- analyze_data: { data_source: "dom_extract|page_info", question: "question à analyser" } (pour agent d'analyse)
-- wait_element: { text: "texte de l'élément attendu", timeout_seconds: 10 }
-- clarify_question: { question: "Quelle information manque-t-il ?" }
-- speak_to_user: { message: "Message à dire à l'utilisateur via text-to-speech" }
-- plan_next_steps: { initial_command: "commande initiale utilisateur", completed_actions: ["liste actions"], next_goal: "objectif suivant" }
+1. Commande: "Quelle est la météo à Paris ?"
+→ {
+  "intent": "get_weather",
+  "action": "get_weather",
+  "arguments": {
+    "location": "Paris",
+    "unit": "celsius"
+  }
+}
 
-EXEMPLES:
-1. Action simple directe:
-Commande: "Descends sur la page" ->
-{
-    "intent": "scroll_down",
-    "actions": {"1": "scroll_page", "2": "speak_to_user"},
+2. Commande: "Quelle heure est-il ?"
+→ {
+  "intent": "get_current_time",
+  "action": "get_time",
+  "arguments": {
+    "format": "24h"
+  }
+}
+
+3. Commande: "Recherche des recettes de cookies"
+→ {
+  "intent": "web_search",
+  "action": "search_web",
+  "arguments": {
+    "query": "recettes cookies",
+    "max_results": 5
+  }
+}
+
+4. Commande: "Ouvre YouTube"
+→ {
+  "intent": "open_website",
+  "action": "open_website",
+  "arguments": {
+    "url": "https://www.youtube.com",
+    "description": "Plateforme de vidéos YouTube"
+  }
+}
+
+5. Commande: "Calcule 15 multiplié par 23"
+→ {
+  "intent": "calculate",
+  "action": "calculate",
+  "arguments": {
+    "expression": "15 * 23",
+    "precision": 2
+  }
+}
+
+6. Commande: "Traduis 'bonjour' en anglais"
+→ {
+  "intent": "translate_text",
+  "action": "translate_text",
+  "arguments": {
+    "text": "bonjour",
+    "from_lang": "fr",
+    "to_lang": "en"
+  }
+}
+
+7. Commande: "Analyse ce texte: 'Le projet va très bien, nous sommes satisfaits'"
+→ {
+  "intent": "analyze_text",
+  "action": "analyze_text",
+  "arguments": {
+    "text": "Le projet va très bien, nous sommes satisfaits",
+    "analysis_type": "sentiment"
+  }
+}
+
+8. Commande: "Recherche des informations sur Python et traduis en anglais"
+→ {
+  "1": {
+    "intent": "research_translate",
+    "action": "search_web",
     "arguments": {
-        "1": {"direction": "down", "amount": "medium"}, 
-        "2": {"message": "J'ai fait défiler la page vers le bas"}
+      "query": "Python programming",
+      "max_results": 3
     }
-}
-
-2. Navigation directe:
-Commande: "Va sur google.com" ->
-{
-    "intent": "navigate",
-    "actions": {"1": "navigate_to", "2": "speak_to_user"},
+  },
+  "2": {
+    "intent": "research_translate", 
+    "action": "translate_text",
     "arguments": {
-        "1": {"url": "https://google.com"},
-        "2": {"message": "J'ai navigué vers Google"}
+      "text": "[SEARCH_RESULTS]",
+      "from_lang": "auto",
+      "to_lang": "en"
     }
+  }
 }
 
-3. Besoin d'extraction DOM (pas dans mémoire):
-Commande: "Clique sur connexion" ->
-{
-    "intent": "click_login",
-    "actions": {"1": "extract_dom", "2": "plan_next_steps"},
-    "arguments": {
-        "1": {"target": "buttons", "search_text": "connexion"},
-        "2": {"initial_command": "Clique sur connexion", "completed_actions": ["extract_dom"], "next_goal": "cliquer sur le bouton connexion trouvé"}
-    }
+9. Commande: "Mets cette page dans mes favoris"
+→ {
+  "intent": "add_bookmark",
+  "action": "manage_bookmarks",
+  "arguments": {
+    "action": "add",
+    "url": "[CURRENT_PAGE_URL]",
+    "title": "[CURRENT_PAGE_TITLE]"
+  }
 }
 
-4. Utilisation d'extraction DOM existante (dans mémoire):
-Commande: "Clique sur connexion" (avec DOM récent) ->
-{
-    "intent": "click_login",
-    "actions": {"1": "click_element", "2": "speak_to_user"},
-    "arguments": {
-        "1": {"selector": "#login-btn", "text": "connexion"},
-        "2": {"message": "J'ai cliqué sur le bouton connexion"}
-    }
+10. Commande: "Ajoute ce site dans mes favoris" (sans contexte de page courante)
+→ {
+  "intent": "clarification_needed",
+  "action": "ask_clarification",
+  "arguments": {
+    "question": "Quelle page ou site web voulez-vous ajouter à vos favoris ? Pouvez-vous me donner l'URL ou le nom du site ?",
+    "context": "bookmark_missing_url"
+  }
 }
 
-5. Multi-actions complexes:
-Commande: "Descends et clique sur s'inscrire" (avec DOM connu) ->
-{
-    "intent": "scroll_click",
-    "actions": {"1": "scroll_page", "2": "click_element", "3": "speak_to_user"},
-    "arguments": {
-        "1": {"direction": "down", "amount": "medium"},
-        "2": {"selector": "#signup", "text": "s'inscrire"},
-        "3": {"message": "J'ai fait défiler et cliqué sur s'inscrire"}
-    }
+11. Commande: "Supprime ce favori"
+11. Commande: "Supprime ce favori"
+→ {
+  "intent": "remove_bookmark",
+  "action": "manage_bookmarks",
+  "arguments": {
+    "action": "remove",
+    "url": "[CURRENT_PAGE_URL]"
+  }
 }
 
-6. Information manquante:
-Commande: "Va sur le site" ->
-{
-    "intent": "navigate",
-    "actions": {"1": "clarify_question"},
-    "arguments": {"1": {"question": "Sur quel site web voulez-vous naviguer ?"}}
+12. Commande: "Montre-moi mes favoris"
+→ {
+  "intent": "list_bookmarks",
+  "action": "manage_bookmarks",
+  "arguments": {
+    "action": "list"
+  }
 }
 
-7. Formulaire (besoin d'extraction DOM):
-Commande: "Remplis le champ nom avec Jean" ->
-{
-    "intent": "fill_form",
-    "actions": {"1": "extract_dom", "2": "plan_next_steps"},
-    "arguments": {
-        "1": {"target": "forms", "search_text": "nom"},
-        "2": {"initial_command": "Remplis le champ nom avec Jean", "completed_actions": ["extract_dom"], "next_goal": "remplir le champ nom avec Jean"}
-    }
+13. Commande: "Télécharge cette page"
+→ {
+  "intent": "clarification_needed",
+  "action": "ask_clarification",
+  "arguments": {
+    "question": "Sous quel nom voulez-vous sauvegarder cette page ? Et dans quel format : HTML, PDF ou texte ?",
+    "context": "download_page_missing_params"
+  }
 }
 
-8. Recherche simple:
-Commande: "Tape 'pizza' dans la recherche" (avec champ connu) ->
-{
-    "intent": "search",
-    "actions": {"1": "type_text", "2": "speak_to_user"},
-    "arguments": {
-        "1": {"selector": "#search-input", "text": "pizza"},
-        "2": {"message": "J'ai tapé 'pizza' dans la barre de recherche"}
-    }
+13. Commande: "Sauvegarde cette page en PDF sous le nom 'rapport.pdf'"
+→ {
+  "intent": "download_page_pdf",
+  "action": "download_page",
+  "arguments": {
+    "url": "[CURRENT_PAGE_URL]",
+    "format": "pdf",
+    "filename": "rapport.pdf"
+  }
 }
 
-9. Question nécessitant analyse de données:
-Commande: "Combien y a-t-il de produits sur cette page ?" ->
-{
-    "intent": "count_products",
-    "actions": {"1": "extract_dom", "2": "analyze_data", "3": "speak_to_user"},
-    "arguments": {
-        "1": {"target": "sections", "search_text": "produit"},
-        "2": {"data_source": "dom_extract", "question": "Combien y a-t-il de produits ?"},
-        "3": {"message": "Réponse de l'agent d'analyse"}
-    }
+14. Commande: "Télécharge le contenu de cette page en texte sous le nom 'contenu.txt'"
+→ {
+  "intent": "download_page_text",
+  "action": "download_page",
+  "arguments": {
+    "url": "[CURRENT_PAGE_URL]",
+    "format": "text",
+    "filename": "contenu.txt"
+  }
 }
 
-10. Plan complexe multi-actions (DOM en mémoire):
-Commande: "Descends, clique sur produits, cherche 'laptop', filtre par prix et achète le premier" ->
-{
-    "intent": "search_buy",
-    "actions": {
-        "1": "scroll_page",
-        "2": "click_element", 
-        "3": "type_text",
-        "4": "click_element",
-        "5": "click_element",
-        "6": "speak_to_user"
-    },
-    "arguments": {
-        "1": {"direction": "down", "amount": "medium"},
-        "2": {"selector": "#products-link", "text": "produits"},
-        "3": {"selector": "#search-box", "text": "laptop"},
-        "4": {"selector": "#filter-price", "text": "prix"},
-        "5": {"selector": ".product-item:first-child .buy-btn", "text": "acheter"},
-        "6": {"message": "J'ai navigué vers les produits, cherché 'laptop', filtré par prix et ajouté le premier article au panier"}
-    }
+16. Commande ambiguë: "Fais quelque chose"
+→ {
+  "intent": "clarification_needed",
+  "action": "ask_clarification",
+  "arguments": {
+    "question": "Que voulez-vous que je fasse exactement ? Je peux vous aider avec la météo, des recherches web, des calculs, des traductions, des analyses de texte, la gestion de vos favoris, ou télécharger des pages.",
+    "context": "commande_trop_vague"
+  }
 }
 
-DONNEES: retourne UNIQUEMENT le JSON demandé, sans texte supplémentaire.`;
+17. Commande nécessitant DOM: "Clique sur le bouton connexion"
+→ {
+  "intent": "limitation_acknowledged",
+  "action": "limit_acknowledgment",
+  "arguments": {
+    "limitation": "Je ne peux pas encore interagir avec les éléments des pages web",
+    "suggestion": "Pour l'instant, je peux ouvrir des sites web, faire des recherches, ou vous aider avec des analyses de données."
+  }
+}
+
+RÈGLES DE PLANIFICATION (Sprint 1.2 - Simplifiées):
+1. Si la commande nécessite une interaction DOM → utiliser "limit_acknowledgment"
+2. Si la commande est ambiguë → utiliser "ask_clarification"
+3. Si des paramètres importants manquent (nom de fichier, format spécifique, etc.) → utiliser "ask_clarification"
+4. Pour plusieurs actions → utiliser le format numéroté {"1": {intent, action, arguments}, "2": {...}}
+5. Pour les favoris (ajouter/supprimer/lister) → utiliser "manage_bookmarks"
+6. Pour télécharger une page (HTML/PDF/texte) → utiliser "download_page" SEULEMENT si filename et format sont spécifiés
+7. Toujours utiliser des paramètres cohérents pour chaque action
+8. Adapter les paramètres au contexte de la demande
+9. Privilégier les actions orientées web et analyse de données
+10. Actions hors contexte web (emails, rappels, notes personnelles) → utiliser "limit_acknowledgment"
+
+COMMANDE UTILISATEUR: "${userInput}"
+
+Génère le plan d'action en format JSON pur (pas de markdown).`;
+
+        return prompt;
     }
 
     /**
-     * Parse la réponse de Gemini en plan JSON
+     * Parse la réponse de Gemini en plan JSON (Sprint 1.2)
      */
-    parsePlanFromResponse(responseText, command) {
+    parsePlanFromResponse(responseText, _command) {
         try {
             // Nettoyage de la réponse
             let cleanResponse = responseText.trim();
@@ -308,237 +394,22 @@ DONNEES: retourne UNIQUEMENT le JSON demandé, sans texte supplémentaire.`;
 
             const parsed = JSON.parse(cleanResponse);
 
-            // Nouveau format avec actions et arguments numérotés
-            if (parsed.actions && parsed.arguments && typeof parsed.actions === 'object') {
-                // Conversion des actions numérotées en plan_steps pour compatibilité
-                const plan_steps = [];
-                const actionKeys = Object.keys(parsed.actions).sort((a, b) => parseInt(a) - parseInt(b));
-                
-                for (const key of actionKeys) {
-                    const action = parsed.actions[key];
-                    const args = parsed.arguments[key] || {};
-                    
-                    plan_steps.push({
-                        intent: action.replace('_', ''),
-                        action: action,
-                        arguments: args,
-                        execution: `Execute ${action} with args: ${JSON.stringify(args)}`
-                    });
-                }
-
-                const firstAction = actionKeys.length > 0 ? parsed.actions[actionKeys[0]] : null;
-                const firstArgs = actionKeys.length > 0 ? parsed.arguments[actionKeys[0]] || {} : {};
-
-                return {
-                    intent: parsed.intent || 'unknown',
-                    actions: parsed.actions,
-                    arguments: parsed.arguments,
-                    // Backward compatibility
-                    plan_steps: plan_steps,
-                    action: firstAction,
-                    firstArguments: firstArgs
-                };
+            // Support du nouveau format numéroté: {"1": {intent, action, arguments}, "2": {...}}
+            if (parsed['1'] && parsed['1'].intent && parsed['1'].action) {
+                return parsed;
             }
 
-            // Si ancienne structure avec plan_steps
-            if (parsed.plan_steps && Array.isArray(parsed.plan_steps)) {
-                const mainIntent = parsed.intent || parsed.plan_steps[0]?.intent || 'unknown';
-                const firstStep = parsed.plan_steps[0] || {};
-
-                return {
-                    intent: mainIntent,
-                    plan_steps: parsed.plan_steps,
-                    clarifying_questions: parsed.clarifying_questions || [] ,
-                    // For backward compatibility expose 'action' and 'arguments' from first step
-                    action: firstStep.action || null,
-                    arguments: firstStep.arguments || {}
-                };
+            // Support de l'ancien format simple: {intent, action, arguments}
+            if (parsed.intent && parsed.action && parsed.arguments) {
+                return parsed;
             }
 
-            // Backward compatibility: single action object
-            if (!parsed.intent || !parsed.action) {
-                throw new Error('Structure JSON incomplète');
-            }
-
-            return {
-                intent: parsed.intent,
-                plan_steps: [ {
-                    intent: parsed.intent,
-                    action: parsed.action,
-                    arguments: parsed.arguments || {},
-                    execution: parsed.execution || ''
-                } ],
-                clarifying_questions: [],
-                action: parsed.action,
-                arguments: parsed.arguments || {}
-            };
+            throw new Error('Format JSON non reconnu pour Sprint 1.2');
 
         } catch (error) {
             console.error('Erreur parsing réponse Gemini:', error.message);
-            return this.generateBasicPlan(command);
+            return this.createErrorPlan(error.message);
         }
-    }
-
-    /**
-     * Génère un plan basique sans IA (fallback)
-     */
-    generateBasicPlan(command) {
-        const lowerCommand = command.toLowerCase();
-
-        // Analyse par mots-clés
-        if (lowerCommand.includes('descend') || lowerCommand.includes('scroll') || lowerCommand.includes('bas')) {
-            return {
-                intent: 'scroll_down',
-                actions: { '1': 'scroll_page', '2': 'speak_to_user' },
-                arguments: { 
-                    '1': { direction: 'down', amount: 'medium' },
-                    '2': { message: 'J\'ai fait défiler la page vers le bas' }
-                },
-                // Backward compatibility
-                action: 'scroll_page',
-                firstArguments: { direction: 'down', amount: 'medium' }
-            };
-        }
-
-        if (lowerCommand.includes('monte') || lowerCommand.includes('haut')) {
-            return {
-                intent: 'scroll_up',
-                actions: { '1': 'scroll_page', '2': 'speak_to_user' },
-                arguments: { 
-                    '1': { direction: 'up', amount: 'medium' },
-                    '2': { message: 'J\'ai fait défiler la page vers le haut' }
-                },
-                // Backward compatibility
-                action: 'scroll_page',
-                firstArguments: { direction: 'up', amount: 'medium' }
-            };
-        }
-
-        if (lowerCommand.includes('clique') || lowerCommand.includes('click')) {
-            // Extraction du texte cible
-            const textMatch = command.match(/(?:clique.*?)(?:sur|le|la)\s+(.+?)(?:\s|$)/i);
-            const targetText = textMatch ? textMatch[1].trim() : null;
-
-            // Si pas de cible explicite, demander clarification
-            if (!targetText) {
-                return {
-                    intent: 'click',
-                    actions: { '1': 'clarify_question' },
-                    arguments: { '1': { question: 'Quel élément dois-je cliquer ? (texte ou selector)' } },
-                    // Backward compatibility
-                    action: 'clarify_question',
-                    firstArguments: { question: 'Quel élément dois-je cliquer ? (texte ou selector)' }
-                };
-            }
-
-            // Vérifier si une extraction DOM récente existe dans la mémoire pour les boutons
-            // Note: Dans un vrai système, on vérifierait this.memory.getRecentContext() pour les extractions récentes
-            // Pour le fallback, on assume qu'il faut extraire car on n'a pas accès à la mémoire contextuelle ici
-            return {
-                intent: 'click',
-                actions: { 
-                    '1': 'extract_dom', 
-                    '2': 'plan_next_steps'
-                },
-                arguments: { 
-                    '1': { target: 'buttons', search_text: targetText },
-                    '2': { initial_command: command, completed_actions: ['extract_dom'], next_goal: `cliquer sur ${targetText}` }
-                },
-                // Backward compatibility
-                action: 'extract_dom',
-                firstArguments: { target: 'buttons', search_text: targetText }
-            };
-        }
-
-        if (lowerCommand.includes('analyse') || lowerCommand.includes('regarde')) {
-            return {
-                intent: 'analyze',
-                actions: { 
-                    '1': 'analyze_page',
-                    '2': 'speak_to_user'
-                },
-                arguments: { 
-                    '1': { focus: 'all' },
-                    '2': { message: 'J\'ai analysé la page et je peux maintenant vous aider avec son contenu' }
-                },
-                // Backward compatibility
-                action: 'analyze_page',
-                firstArguments: { focus: 'all' }
-            };
-        }
-
-        if (lowerCommand.includes('navigue') || lowerCommand.includes('va vers')) {
-            // essayer d'extraire une url
-            const urlMatch = command.match(/https?:\/\/[\w.\-/?=&%#]+/i);
-            const url = urlMatch ? urlMatch[0] : null;
-
-            if (!url) {
-                return {
-                    intent: 'navigate',
-                    actions: { '1': 'clarify_question' },
-                    arguments: { '1': { question: 'Sur quel site web voulez-vous naviguer ?' } },
-                    // Backward compatibility
-                    action: 'clarify_question',
-                    firstArguments: { question: 'Sur quel site web voulez-vous naviguer ?' }
-                };
-            }
-
-            return {
-                intent: 'navigate',
-                actions: { 
-                    '1': 'navigate_to',
-                    '2': 'speak_to_user'
-                },
-                arguments: { 
-                    '1': { url },
-                    '2': { message: `J'ai navigué vers ${url}` }
-                },
-                // Backward compatibility
-                action: 'navigate_to',
-                firstArguments: { url }
-            };
-        }
-
-        // Actions de memoire
-        if (lowerCommand.includes('historique') || lowerCommand.includes('consulte')) {
-            return {
-                intent: 'view_history',
-                actions: { '1': 'consult_history' },
-                arguments: { '1': { filter: 'all' } },
-                action: 'consult_history',
-                firstArguments: { filter: 'all' }
-            };
-        }
-
-        if (lowerCommand.includes('efface') || lowerCommand.includes('vide') || lowerCommand.includes('clear')) {
-            return {
-                intent: 'clear_memory',
-                actions: { '1': 'clear_memory' },
-                arguments: { '1': { confirm: true } },
-                action: 'clear_memory',
-                firstArguments: { confirm: true }
-            };
-        }
-
-        if (lowerCommand.includes('stats') || lowerCommand.includes('statistiques')) {
-            return {
-                intent: 'view_stats',
-                actions: { '1': 'get_stats' },
-                arguments: { '1': { type: 'full' } },
-                action: 'get_stats',
-                firstArguments: { type: 'full' }
-            };
-        }
-
-        // Plan par défaut
-        return {
-            intent: 'unknown',
-            actions: { '1': 'analyze_page' },
-            arguments: { '1': { focus: 'text' } },
-            // Backward compatibility
-            action: 'analyze_page',
-            firstArguments: { focus: 'text' }
-        };
     }
 
     /**
@@ -547,11 +418,10 @@ DONNEES: retourne UNIQUEMENT le JSON demandé, sans texte supplémentaire.`;
     createErrorPlan(errorMessage) {
         return {
             intent: 'error',
-            actions: { '1': 'show_error' },
-            arguments: { '1': { message: errorMessage } },
-            // Backward compatibility
             action: 'show_error',
-            firstArguments: { message: errorMessage }
+            arguments: {
+                message: errorMessage
+            }
         };
     }
 
@@ -561,7 +431,7 @@ DONNEES: retourne UNIQUEMENT le JSON demandé, sans texte supplémentaire.`;
     async consultHistory(filter = 'all') {
         try {
             const history = await this.memory.getAllHistory();
-            return {
+            const plan = {
                 intent: 'view_history',
                 action: 'display_history',
                 arguments: {
@@ -570,8 +440,18 @@ DONNEES: retourne UNIQUEMENT le JSON demandé, sans texte supplémentaire.`;
                     filter: filter
                 }
             };
+            
+            // Sauvegarder cette consultation dans la mémoire
+            await this.memory.addInteraction(`consulter historique (filtre: ${filter})`, plan);
+            return plan;
         } catch (error) {
-            return this.createErrorPlan(`Erreur lors de la consultation de l'historique: ${error.message}`);
+            const errorPlan = this.createErrorPlan(`Erreur lors de la consultation de l'historique: ${error.message}`);
+            try {
+                await this.memory.addInteraction(`consulter historique (filtre: ${filter})`, errorPlan);
+            } catch (memoryError) {
+                console.error('Erreur sauvegarde mémoire:', memoryError.message);
+            }
+            return errorPlan;
         }
     }
 
@@ -581,7 +461,7 @@ DONNEES: retourne UNIQUEMENT le JSON demandé, sans texte supplémentaire.`;
     async clearMemory() {
         try {
             await this.memory.clearHistory();
-            return {
+            const plan = {
                 intent: 'clear_memory',
                 action: 'show_message',
                 arguments: {
@@ -589,8 +469,18 @@ DONNEES: retourne UNIQUEMENT le JSON demandé, sans texte supplémentaire.`;
                     type: 'success'
                 }
             };
+            
+            // Sauvegarder cette action dans la mémoire (après l'effacement)
+            await this.memory.addInteraction('effacer historique', plan);
+            return plan;
         } catch (error) {
-            return this.createErrorPlan(`Erreur lors de l'effacement: ${error.message}`);
+            const errorPlan = this.createErrorPlan(`Erreur lors de l'effacement: ${error.message}`);
+            try {
+                await this.memory.addInteraction('effacer historique', errorPlan);
+            } catch (memoryError) {
+                console.error('Erreur sauvegarde mémoire:', memoryError.message);
+            }
+            return errorPlan;
         }
     }
 

@@ -185,9 +185,6 @@
                 <button class="btn btn-secondary" onclick="testAgent()">
                     Test Agent
                 </button>
-                <button class="btn btn-secondary" onclick="checkHealth()">
-                    Vérifier Santé
-                </button>
             </div>
         </div>
 
@@ -224,7 +221,6 @@
         // Initialisation
         document.addEventListener('DOMContentLoaded', function() {
             document.getElementById('command-input').focus();
-            checkHealth();
             
             // Raccourci clavier
             document.getElementById('command-input').addEventListener('keydown', function(e) {
@@ -299,23 +295,6 @@
                 showError('Erreur test: ' + error.message);
             } finally {
                 showLoading(false);
-            }
-        }
-
-        // Vérification de santé
-        async function checkHealth() {
-            try {
-                const response = await fetch(`${API_BASE}/api/health`);
-                const health = await response.json();
-                
-                if (health.status === 'healthy') {
-                    updateStatus('Système opérationnel - Gemini: ' + 
-                        (health.agent_stats.gemini_available ? 'Disponible' : 'Mode dégradé'));
-                } else {
-                    updateStatus('Problème système détecté');
-                }
-            } catch (error) {
-                updateStatus('Connexion impossible au serveur');
             }
         }
 

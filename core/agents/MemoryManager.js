@@ -9,7 +9,8 @@ const path = require('path');
 class MemoryManager {
     constructor() {
         this.memoryFile = path.join(__dirname, 'data/conversation_memory.txt');
-        this.maxTokens = 3000; // Limite approximative pour éviter les prompts trop longs
+        // Gemini 2.0 Flash peut gérer ~1M tokens, on utilise 3/4 d'une limite raisonnable (20k tokens)
+        this.maxTokens = 15000; 
         this.initialized = false;
     }
 
@@ -20,6 +21,7 @@ class MemoryManager {
         if (this.initialized) return;
 
         try {
+            console.log('DEBUG: Initialisation du fichier mémoire...');
             // Créer le dossier data s'il n'existe pas
             const dataDir = path.dirname(this.memoryFile);
             await fs.mkdir(dataDir, { recursive: true });
@@ -27,10 +29,13 @@ class MemoryManager {
             // Créer le fichier s'il n'existe pas
             try {
                 await fs.access(this.memoryFile);
+                console.log('DEBUG: Fichier mémoire existe déjà');
             } catch {
                 await fs.writeFile(this.memoryFile, '=== Historique des Conversations AVN ===\n\n');
+                console.log('DEBUG: Fichier mémoire créé');
             }
             this.initialized = true;
+            console.log('DEBUG: Fichier mémoire initialisé avec succès');
         } catch (error) {
             console.error('Erreur lors de l\'initialisation du fichier mémoire:', error);
             this.initialized = false;
@@ -44,6 +49,7 @@ class MemoryManager {
      */
     async addInteraction(userMessage, agentPlan) {
         try {
+            console.log('DEBUG: Tentative d\'ajout à la mémoire:', userMessage);
             await this.ensureMemoryFile();
             
             const timestamp = new Date().toISOString();
@@ -56,6 +62,7 @@ Agent Plan: ${JSON.stringify(agentPlan, null, 2)}
 `;
 
             await fs.appendFile(this.memoryFile, interaction);
+            console.log('DEBUG: Interaction sauvegardée avec succès');
             
             // Nettoyer la mémoire si elle devient trop grande
             await this.cleanMemoryIfNeeded();
@@ -104,21 +111,23 @@ Agent Plan: ${JSON.stringify(agentPlan, null, 2)}
      */
     async cleanMemoryIfNeeded() {
         try {
-            const stats = await fs.stat(this.memoryFile);
-            const fileSizeKB = stats.size / 1024;
+            const content = await fs.readFile(this.memoryFile, 'utf-8');
+            const estimatedTokens = Math.ceil(content.length / 4); // Approximation: 4 chars = 1 token
 
-            // Si le fichier fait plus de 50KB, garder seulement les 20 dernières interactions
-            if (fileSizeKB > 50) {
-                const content = await fs.readFile(this.memoryFile, 'utf-8');
+            // Si on dépasse la limite de tokens, garder seulement les interactions récentes
+            if (estimatedTokens > this.maxTokens) {
+                console.log(`DEBUG: Nettoyage mémoire - ${estimatedTokens} tokens > ${this.maxTokens} limite`);
+                
                 const interactions = content.split('---\n').filter(section => section.trim());
                 
-                if (interactions.length > 20) {
+                if (interactions.length > 15) {
                     const header = '=== Historique des Conversations AVN ===\n\n';
-                    const recentInteractions = interactions.slice(-20);
+                    const recentInteractions = interactions.slice(-15); // Garder les 15 dernières
                     const newContent = header + recentInteractions.join('---\n') + '---\n';
                     
                     await fs.writeFile(this.memoryFile, newContent);
-                    console.log('Mémoire nettoyée: gardé les 20 dernières interactions');
+                    const newTokens = Math.ceil(newContent.length / 4);
+                    console.log(`Mémoire nettoyée: ${newTokens} tokens, gardé 15 dernières interactions`);
                 }
             }
         } catch (error) {

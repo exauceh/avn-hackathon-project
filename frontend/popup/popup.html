@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <title>🎙 AVN Navigator</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+
+  <body>
+    <div class="container">
+      <h1>🎙 AVN Navigator</h1>
+      <p class="subtitle">Navigateur vocal agentique – Team D</p>
+
+      <!-- 🧩 Test connexion backend -->
+      <div class="section">
+        <button id="pingBtn" class="btn primary">Tester la connexion</button>
+        <div class="indicator" id="backendIndicator"></div>
+        <p id="status" class="status">Extension initialisée...</p>
+      </div>
+
+      <div class="divider"></div>
+
+      <!-- 🌐 Analyse manuelle -->
+      <div class="section">
+        <button id="analyzeBtn" class="btn secondary">Analyser la page</button>
+        <div class="indicator" id="analyzeIndicator"></div>
+        <p id="analyzeStatus" class="status"></p>
+      </div>
+
+      <div class="divider"></div>
+
+      <!-- 🎙 Commandes vocales -->
+      <div class="section voice-control">
+        <h2>🎧 Contrôle vocal</h2>
+
+        <!-- Boutons d’action -->
+        <div class="voice-buttons">
+          <button id="speakBtn" class="btn accent">🎙 Parler</button>
+          <button id="stopBtn" class="btn danger">🛑 Stop</button>
+        </div>
+
+        <!-- Indicateur d’état -->
+        <div class="voice-indicators">
+          <span id="ledIndicator" class="led off"></span>
+          <span id="stateLabel">Mode veille</span>
+        </div>
+
+        <!-- Zone de transcription -->
+        <div id="transcriptBox" class="transcript-box">
+          <p id="transcriptText" class="transcript-text">
+            <em>En attente du mot-clé : “Dis AVN”...</em>
+          </p>
+        </div>
+
+        <!-- État texte -->
+        <p id="voiceStatus" class="status"></p>
+      </div>
+
+      <footer>
+        <small>© AVN Hackathon – 2025</small>
+      </footer>
+    </div>
+
+    <!-- ✅ Chargement des scripts -->
+    <script type="module" src="popup.js"></script>
+    <script type="module" src="../voice/voiceUI.js"></script>
+  </body>
+</html>
+

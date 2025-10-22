@@ -6,11 +6,17 @@
 
 const { initializeGCPCredentials, getVertexAIConfig } = require('./credentials');
 const MemoryManager = require('./MemoryManager');
+const PerceptionAgent = require('./perception'); 
 
 class PlanningAgent {
     constructor() {
         // Initialisation de la mémoire
         this.memory = new MemoryManager();
+
+        // Initialisation de l'agent de perception
+        this.perception = new PerceptionAgent();
+
+
 
         // Initialisation des credentials
         if (!initializeGCPCredentials()) {
@@ -55,6 +61,13 @@ class PlanningAgent {
         }
     }
 
+    async getDOMFromFrontend() {
+      // Simulez une récupération du DOM depuis le front-end (à remplacer par une vraie intégration)
+      const domContent = "<html><body><h1>Introduction</h1><p>Bienvenue sur notre site...</p></body></html>";
+      console.log("DOM reçu depuis le front-end :", domContent);
+      return domContent;
+    }
+    
     /**
      * Point d'entrée principal : traite une commande vocale
      * @param {string} command - Commande utilisateur
@@ -68,6 +81,19 @@ class PlanningAgent {
                 return this.createErrorPlan('Commande vide');
             }
 
+            // Vérifier si la commande concerne l'analyse de page
+            if (command.toLowerCase().includes("analyse cette page") || command.toLowerCase().includes("lis cette page")) {
+                const domContent = await this.getDOMFromFrontend(); // Récupérer le DOM depuis le front-end
+                const perceptionResult = await this.perception.analyzeDOM(domContent);
+
+                return {
+                    intent: "analyze_page",
+                    action: "analyze_page",
+                    arguments: perceptionResult
+                };
+            }
+
+            // Bloc principal pour les autres commandes
             let plan;
             if (this.geminiAvailable) {
                 plan = await this.generatePlanWithGemini(command);
@@ -85,14 +111,14 @@ class PlanningAgent {
             this.stats.failed_plans++;
             console.error('Erreur traitement commande:', error.message);
             const errorPlan = this.createErrorPlan(error.message);
-            
+
             // Sauvegarder aussi les erreurs dans la mémoire
             try {
                 await this.memory.addInteraction(command, errorPlan);
             } catch (memoryError) {
                 console.error('Erreur sauvegarde mémoire:', memoryError.message);
             }
-            
+
             return errorPlan;
         }
     }

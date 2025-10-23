@@ -290,7 +290,6 @@ EXEMPLES DE PLANIFICATION (Simplifiés):
 }
 
 11. Commande: "Supprime ce favori"
-11. Commande: "Supprime ce favori"
 → {
   "intent": "remove_bookmark",
   "action": "manage_bookmarks",

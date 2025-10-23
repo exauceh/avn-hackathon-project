@@ -6,6 +6,9 @@ __pycache__/
 # Fichiers de données/mémoire de l'agent
 core/agents/data/conversation_memory.txt
 
+# Fichier de liste des actions (documentation de référence)
+actions_list.txt
+
 # C extensions
 *.so
 
@@ -220,8 +223,11 @@ Thumbs.db
 logs
 *.log
 
-# GCP Credentials - NEVER COMMIT THESE!
+# GCP Credentials 
 gcp-service-account.json
 avn-hackathon-project-8df77caa78b2.json
 *-service-account.json
+
+# docs
+core/agents/outils
 

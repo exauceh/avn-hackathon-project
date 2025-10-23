@@ -99,7 +99,7 @@ GOOGLE_CLOUD_LOCATION=europe-west9
 GEMINI_MODEL=gemini-2.0-flash-001
 
 # Configuration Serveur
-PORT=5000
+PORT=3000
 NODE_ENV=development
 ```
 
@@ -119,11 +119,11 @@ npm start
 npm run dev
 ```
 
-Le serveur sera accessible sur `http://localhost:5000`
+Le serveur sera accessible sur `http://localhost:3000`
 
 ### Interface web
 
-Ouvrir un navigateur et aller à `http://localhost:5000` pour accéder à l'interface de test.
+Ouvrir un navigateur et aller à `http://localhost:3000` pour accéder à l'interface de test.
 
 L'interface permet de :
 - Tester des commandes textuelles
@@ -135,7 +135,7 @@ L'interface permet de :
 
 #### Générer un plan
 ```bash
-POST http://localhost:5000/api/plan
+POST http://localhost:3000/api/plan
 Content-Type: application/json
 
 {
@@ -145,12 +145,12 @@ Content-Type: application/json
 
 #### Consulter l'historique
 ```bash
-GET http://localhost:5000/api/memory/history
+GET http://localhost:3000/api/memory/history
 ```
 
 #### Obtenir les statistiques
 ```bash
-GET http://localhost:5000/api/stats
+GET http://localhost:3000/api/stats
 ```
 
 ### Exemples de commandes
@@ -211,7 +211,7 @@ npm run health
 
 ### Tests manuels via l'interface web
 1. Démarrer le serveur : `npm start`
-2. Ouvrir `http://localhost:5000`
+2. Ouvrir `http://localhost:3000`
 3. Tester différentes commandes dans l'interface
 
 ## Dépannage
@@ -238,6 +238,50 @@ PORT=3000
 - Vérifier que l'API Vertex AI est activée sur GCP
 - Vérifier les quotas et limites de l'API
 - Vérifier les credentials et permissions
+
+### Exemple de sortie JSON
+
+Voici un exemple de sortie JSON générée par `PerceptionAgent` pour la commande `"Analyse cette page"` :
+
+```json
+{
+  "sections": [
+    {
+      "title": "Introduction",
+      "content": "Bienvenue sur notre site..."
+    },
+    {
+      "title": "Contact",
+      "content": "Envoyez-nous un message via le formulaire ci-dessous."
+    }
+  ],
+  "images": [
+    {
+      "url": "https://example.com/image1.jpg",
+      "labels": ["Graphique", "Ventes", "2024"]
+    },
+    {
+      "url": "https://example.com/image2.jpg",
+      "labels": ["Logo", "Entreprise"]
+    }
+  ],
+  "forms": [
+    {
+      "action": "/submit",
+      "fields": [
+        {
+          "name": "email",
+          "type": "email",
+          "required": true
+        },
+        {
+          "name": "message",
+          "type": "textarea"
+        }
+      ]
+    }
+  ]
+}
 
 ### Logs et debugging
 

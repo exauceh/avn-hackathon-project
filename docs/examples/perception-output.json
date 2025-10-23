@@ -1,0 +1,38 @@
+{
+  "sections": [
+    {
+      "title": "Introduction",
+      "content": "Bienvenue sur notre site..."
+    },
+    {
+      "title": "Contact",
+      "content": "Envoyez-nous un message via le formulaire ci-dessous."
+    }
+  ],
+  "images": [
+    {
+      "url": "https://example.com/image1.jpg",
+      "labels": ["Graphique", "Ventes", "2024"]
+    },
+    {
+      "url": "https://example.com/image2.jpg",
+      "labels": ["Logo", "Entreprise"]
+    }
+  ],
+  "forms": [
+    {
+      "action": "/submit",
+      "fields": [
+        {
+          "name": "email",
+          "type": "email",
+          "required": true
+        },
+        {
+          "name": "message",
+          "type": "textarea"
+        }
+      ]
+    }
+  ]
+}

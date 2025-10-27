@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Page - AVN Demo</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #333;
+        }
+
+        .container {
+            background: white;
+            padding: 40px;
+            border-radius: 10px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+        }
+
+        h1 {
+            color: #667eea;
+            margin-bottom: 10px;
+        }
+
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+            font-style: italic;
+        }
+
+        .article {
+            margin: 30px 0;
+            padding: 20px;
+            background: #f8f9fa;
+            border-left: 4px solid #667eea;
+            border-radius: 5px;
+        }
+
+        .article h2 {
+            color: #764ba2;
+            margin-top: 0;
+        }
+
+        .newsletter-form {
+            margin: 40px 0;
+            padding: 30px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 10px;
+            color: white;
+        }
+
+        .newsletter-form h3 {
+            margin-top: 0;
+            font-size: 24px;
+        }
+
+        .form-group {
+            margin: 20px 0;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: bold;
+        }
+
+        .form-group input {
+            width: 100%;
+            padding: 12px;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            box-sizing: border-box;
+        }
+
+        .submit-btn {
+            background: white;
+            color: #667eea;
+            padding: 12px 30px;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+
+        .submit-btn:hover {
+            transform: scale(1.05);
+        }
+
+        .instructions {
+            margin: 30px 0;
+            padding: 20px;
+            background: #fff3cd;
+            border: 1px solid #ffc107;
+            border-radius: 5px;
+        }
+
+        .instructions h3 {
+            margin-top: 0;
+            color: #856404;
+        }
+
+        .instructions ol {
+            margin: 10px 0;
+        }
+
+        .instructions li {
+            margin: 10px 0;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 4px 12px;
+            background: #667eea;
+            color: white;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: bold;
+            margin-left: 10px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>🤖 AVN - Test Page pour Démo</h1>
+        <p class="subtitle">Page de test pour les 3 cas d'usage du hackathon</p>
+
+        <div class="instructions">
+            <h3>📋 Instructions de Test</h3>
+            <ol>
+                <li>
+                    <strong>Cas d'Usage #1 - Recherche :</strong><br>
+                    Dites : <em>"Recherche les dernières nouvelles sur l'intelligence artificielle"</em>
+                </li>
+                <li>
+                    <strong>Cas d'Usage #2 - Navigation :</strong><br>
+                    Après la recherche, dites : <em>"Lis l'article sur Gemini"</em> ou <em>"Ouvre le premier
+                        article"</em>
+                </li>
+                <li>
+                    <strong>Cas d'Usage #3 - Formulaire :</strong><br>
+                    Sur cette page, dites : <em>"Inscris-toi à la newsletter"</em>
+                </li>
+            </ol>
+        </div>
+
+        <div class="article">
+            <h2>🚀 Google Lance Gemini 2.5 Pro <span class="badge">NOUVEAU</span></h2>
+            <p>
+                <strong>Date :</strong> 27 Octobre 2025
+            </p>
+            <p>
+                Google dévoile aujourd'hui Gemini 2.5 Pro, son modèle d'intelligence artificielle
+                le plus avancé à ce jour. Cette nouvelle version apporte des capacités multimodales
+                révolutionnaires, permettant de traiter simultanément du texte, des images, de
+                l'audio et de la vidéo.
+            </p>
+            <p>
+                Avec une fenêtre de contexte étendue à 2 millions de tokens, Gemini 2.5 Pro peut
+                analyser des documents entiers, des vidéos de plusieurs heures, et maintenir des
+                conversations cohérentes sur de longues périodes.
+            </p>
+            <p>
+                Les premières applications incluent l'assistance médicale, l'éducation personnalisée,
+                et des outils d'accessibilité pour les personnes en situation de handicap.
+            </p>
+        </div>
+
+        <div class="article">
+            <h2>🇪🇺 Nouvelles Régulations de l'IA en Europe</h2>
+            <p>
+                <strong>Date :</strong> 25 Octobre 2025
+            </p>
+            <p>
+                L'Union Européenne met en place l'AI Act, un cadre réglementaire historique pour
+                encadrer le développement et l'utilisation de l'intelligence artificielle. Cette
+                législation classe les systèmes d'IA selon leur niveau de risque.
+            </p>
+            <p>
+                Les applications à haut risque, comme la reconnaissance faciale en temps réel ou
+                les systèmes de notation sociale, sont strictement encadrées ou interdites.
+            </p>
+        </div>
+
+        <!-- Formulaire de Newsletter (Cas d'Usage #3) -->
+        <div class="newsletter-form" id="newsletter-form">
+            <h3>📧 Abonnez-vous à notre Newsletter</h3>
+            <p>Restez informé des dernières actualités sur l'IA</p>
+
+            <form id="newsletter-signup" action="/subscribe" method="POST">
+                <div class="form-group">
+                    <label for="email">Adresse Email *</label>
+                    <input type="email" id="email" name="email" placeholder="votre.email@exemple.com" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="name">Nom (optionnel)</label>
+                    <input type="text" id="name" name="name" placeholder="Votre nom">
+                </div>
+
+                <button type="submit" class="submit-btn">
+                    S'abonner à la Newsletter
+                </button>
+            </form>
+        </div>
+
+        <div class="instructions">
+            <h3>🎤 Commandes Vocales Disponibles</h3>
+            <ul>
+                <li><strong>"Recherche [sujet]"</strong> - Lance une recherche Google</li>
+                <li><strong>"Lis l'article sur [mot-clé]"</strong> - Ouvre un article spécifique</li>
+                <li><strong>"Ouvre le premier/deuxième/troisième article"</strong> - Navigation par numéro</li>
+                <li><strong>"Inscris-toi à la newsletter"</strong> - Détecte et remplit le formulaire</li>
+                <li><strong>"Soumets le formulaire"</strong> - Confirme et soumet</li>
+                <li><strong>"Descends" / "Monte"</strong> - Scroll de page</li>
+                <li><strong>"Retour"</strong> - Retour à la page précédente</li>
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        // Gérer la soumission du formulaire pour la démo
+        document.getElementById('newsletter-signup').addEventListener('submit', function (e) {
+            e.preventDefault();
+
+            const email = document.getElementById('email').value;
+            const name = document.getElementById('name').value;
+
+            // Afficher un message de succès
+            alert(`✅ Merci pour votre inscription !\n\nEmail: ${email}${name ? '\nNom: ' + name : ''}\n\n(Ceci est une démo, aucun email n'est réellement envoyé)`);
+
+            // Réinitialiser le formulaire
+            this.reset();
+        });
+
+        // Logger le chargement de la page pour le debugging
+        console.log('📄 Page de test AVN chargée');
+        console.log('🔍 Formulaires détectés:', document.querySelectorAll('form').length);
+    </script>
+</body>
+
+</html>

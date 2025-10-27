@@ -25,6 +25,11 @@ steps:
     - europe-west9
     - --platform
     - managed
+    - --set-env-vars
+    - PROJECT_ID=$PROJECT_ID,STT_TOPIC=your-stt-topic-name
+    # Ajoutez d'autres variables si nécessaire :
+    # - --set-env-vars
+    # - VAR1=value1,VAR2=value2
 
 
 logsBucket: 'gs://gcpu-hackathon-logs-474123' 

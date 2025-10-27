@@ -1,0 +1,29 @@
+{
+  "name": "avn-hackathon-project",
+  "version": "1.0.0",
+  "description": "https://orchestration-769385086849.europe-west9.run.app",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/exauceh/avn-hackathon-project.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/exauceh/avn-hackathon-project/issues"
+  },
+  "homepage": "https://github.com/exauceh/avn-hackathon-project#readme",
+  "devDependencies": {
+    "@types/chrome": "^0.1.24",
+    "@types/node": "^24.9.1",
+    "@types/web": "^0.0.283",
+    "typescript": "^5.9.3"
+  }
+}

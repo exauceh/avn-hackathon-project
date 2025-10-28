@@ -1,6 +1,6 @@
 """
-FormAgent - Agent spécialisé pour les interactions avec les formulaires
-Cas d'usage #3: Remplir et soumettre des formulaires
+FormAgent - Specialized agent for form interactions
+Use case #3: Fill and submit forms
 """
 
 from typing import Dict, Any, List
@@ -9,86 +9,86 @@ import re
 
 
 class FormAgent:
-    """Agent pour détecter et remplir des formulaires"""
+    """Agent for detecting and filling forms"""
     
     def __init__(self, llm):
         self.llm = llm
     
     def process(self, state: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Traite une requête liée aux formulaires
+        Processes a form-related request
         
         Args:
-            state: État actuel du graphe
+            state: Current graph state
         
         Returns:
-            État mis à jour avec l'action de formulaire
+            Updated state with form action
         """
         
         last_message = state["messages"][-1].content.lower()
         
         print(f"📝 FormAgent: {last_message}")
         
-        # Détecter le type d'action
-        if any(word in last_message for word in ["inscris", "abonne", "newsletter", "inscription"]):
+        # Detect action type
+        if any(word in last_message for word in ["subscribe", "sign up", "newsletter", "registration"]):
             return self._handle_newsletter_subscription(state)
         
-        elif any(word in last_message for word in ["remplis", "formulaire", "complète"]):
+        elif any(word in last_message for word in ["fill", "form", "complete"]):
             return self._handle_form_fill(state)
         
-        elif any(word in last_message for word in ["soumets", "envoie", "valide"]):
+        elif any(word in last_message for word in ["submit", "send", "validate"]):
             return self._handle_form_submit(state)
         
         else:
-            state["response_text"] = "Je n'ai pas compris l'action sur le formulaire. Pouvez-vous préciser ?"
+            state["response_text"] = "I didn't understand the form action. Can you clarify?"
             state["action"] = {}
         
         return state
     
     def _handle_newsletter_subscription(self, state: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Gère l'inscription à une newsletter
+        Handles newsletter subscription
         """
         
-        # Récupérer le contexte de la page
+        # Get page context
         page_content = state.get("page_content", {})
         
-        # Détecter les formulaires sur la page (simulé pour la démo)
+        # Detect forms on page (simulated for demo)
         forms = page_content.get("forms", [])
         
-        # Si pas de formulaires dans le contexte, demander au frontend
+        # If no forms in context, ask frontend
         if not forms:
-            # Préparer une action pour demander au content.js de scanner
+            # Prepare action to ask content.js to scan
             state["action"] = {
                 "type": "scan_forms",
                 "form_type": "newsletter"
             }
             
-            state["response_text"] = "Je cherche un formulaire d'inscription sur cette page..."
+            state["response_text"] = "I'm looking for a subscription form on this page..."
             state["needs_confirmation"] = False
             
             return state
         
-        # Trouver le formulaire de newsletter
+        # Find newsletter form
         newsletter_form = self._find_newsletter_form(forms)
         
         if not newsletter_form:
-            state["response_text"] = "Je n'ai pas trouvé de formulaire d'inscription sur cette page."
+            state["response_text"] = "I didn't find a subscription form on this page."
             state["action"] = {}
             return state
         
-        # Récupérer l'email de l'utilisateur
+        # Get user email
         user_email = state.get("user_email", "user@avn.com")
         
-        # Préparer la confirmation
+        # Prepare confirmation
         state["response_text"] = (
-            f"J'ai trouvé le formulaire d'abonnement. "
-            f"Dois-je utiliser votre adresse par défaut : {user_email} ?"
+            f"I found the subscription form. "
+            f"Should I use your default email: {user_email}?"
         )
         
         state["needs_confirmation"] = True
         
-        # Stocker les infos du formulaire pour la soumission
+        # Store form info for submission
         state["action"] = {
             "type": "form_ready",
             "form_id": newsletter_form.get("id", ""),
@@ -100,19 +100,19 @@ class FormAgent:
     
     def _handle_form_submit(self, state: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Gère la soumission d'un formulaire
+        Handles form submission
         """
         
         last_message = state["messages"][-1].content.lower()
         
-        # Vérifier si c'est une confirmation
-        if any(word in last_message for word in ["oui", "ok", "vas-y", "soumets", "valide"]):
+        # Check if it's a confirmation
+        if any(word in last_message for word in ["yes", "ok", "go ahead", "submit", "validate"]):
             
-            # Récupérer les infos du formulaire préparé
+            # Get prepared form info
             form_action = state.get("action", {})
             
             if form_action.get("type") == "form_ready":
-                # Préparer l'action de soumission
+                # Prepare submission action
                 state["action"] = {
                     "type": "fill_and_submit",
                     "form_id": form_action.get("form_id", ""),
@@ -125,45 +125,45 @@ class FormAgent:
                 }
                 
                 state["response_text"] = (
-                    "Parfait ! Je remplis et soumets le formulaire maintenant. "
-                    "Je vous tiendrai informé du résultat."
+                    "Perfect! I'm filling and submitting the form now. "
+                    "I'll keep you informed of the result."
                 )
                 
                 state["needs_confirmation"] = False
             
             else:
-                state["response_text"] = "Aucun formulaire n'est prêt à être soumis. Voulez-vous que je cherche un formulaire ?"
+                state["response_text"] = "No form is ready to submit. Would you like me to find a form?"
                 state["action"] = {}
         
         else:
-            # Annulation
-            state["response_text"] = "D'accord, je n'envoie pas le formulaire."
+            # Cancellation
+            state["response_text"] = "Okay, I won't submit the form."
             state["action"] = {}
         
         return state
     
     def _handle_form_fill(self, state: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Gère le remplissage d'un formulaire générique
+        Handles generic form filling
         """
         
         page_content = state.get("page_content", {})
         forms = page_content.get("forms", [])
         
         if not forms:
-            state["response_text"] = "Je n'ai trouvé aucun formulaire sur cette page."
+            state["response_text"] = "I didn't find any form on this page."
             state["action"] = {}
             return state
         
-        # Analyser le premier formulaire
+        # Analyze first form
         form = forms[0]
         
-        # Générer une description des champs
+        # Generate field description
         fields_description = self._describe_form_fields(form.get("fields", []))
         
         state["response_text"] = (
-            f"J'ai trouvé un formulaire avec les champs suivants : {fields_description}. "
-            f"Quelles informations voulez-vous que je remplisse ?"
+            f"I found a form with the following fields: {fields_description}. "
+            f"What information would you like me to fill in?"
         )
         
         state["action"] = {
@@ -177,26 +177,26 @@ class FormAgent:
     
     def _find_newsletter_form(self, forms: List[Dict[str, Any]]) -> Dict[str, Any]:
         """
-        Trouve un formulaire de newsletter parmi une liste de formulaires
+        Finds a newsletter form among a list of forms
         
         Args:
-            forms: Liste de formulaires détectés
+            forms: List of detected forms
         
         Returns:
-            Le formulaire de newsletter ou None
+            Newsletter form or None
         """
         
-        newsletter_keywords = ["newsletter", "subscribe", "inscription", "email", "abonnement"]
+        newsletter_keywords = ["newsletter", "subscribe", "registration", "email", "subscription"]
         
         for form in forms:
-            # Vérifier les attributs du formulaire
+            # Check form attributes
             form_text = (
                 form.get("id", "") + " " +
                 form.get("class", "") + " " +
                 form.get("action", "")
             ).lower()
             
-            # Vérifier les champs
+            # Check fields
             fields_text = " ".join([
                 f.get("name", "") + " " + f.get("placeholder", "")
                 for f in form.get("fields", [])
@@ -204,7 +204,7 @@ class FormAgent:
             
             combined_text = form_text + " " + fields_text
             
-            # Si contient des mots-clés de newsletter
+            # If contains newsletter keywords
             if any(keyword in combined_text for keyword in newsletter_keywords):
                 return form
         
@@ -212,21 +212,21 @@ class FormAgent:
     
     def _describe_form_fields(self, fields: List[Dict[str, Any]]) -> str:
         """
-        Génère une description textuelle des champs d'un formulaire
+        Generates a textual description of form fields
         
         Args:
-            fields: Liste des champs du formulaire
+            fields: List of form fields
         
         Returns:
-            Description textuelle
+            Textual description
         """
         
         if not fields:
-            return "aucun champ"
+            return "no fields"
         
         field_names = []
         for field in fields:
-            name = field.get("label") or field.get("placeholder") or field.get("name", "champ inconnu")
+            name = field.get("label") or field.get("placeholder") or field.get("name", "unknown field")
             field_type = field.get("type", "text")
             field_names.append(f"{name} ({field_type})")
         
@@ -234,18 +234,18 @@ class FormAgent:
     
     def extract_forms_from_dom(self, page_content: Dict[str, Any]) -> List[Dict[str, Any]]:
         """
-        Extrait les formulaires d'un contenu de page
-        (À utiliser par le frontend pour passer le contexte)
+        Extracts forms from page content
+        (To be used by frontend to pass context)
         
         Args:
-            page_content: Contenu de la page (structure DOM)
+            page_content: Page content (DOM structure)
         
         Returns:
-            Liste des formulaires détectés
+            List of detected forms
         """
         
-        # Cette fonction sera appelée par le content.js
-        # Pour la démo, retourner un formulaire simulé
+        # This function will be called by content.js
+        # For demo, return a simulated form
         return [
             {
                 "id": "newsletter-form",
@@ -256,21 +256,21 @@ class FormAgent:
                     {
                         "name": "email",
                         "type": "email",
-                        "placeholder": "Votre email",
+                        "placeholder": "Your email",
                         "label": "Email",
                         "required": True
                     },
                     {
                         "name": "submit",
                         "type": "submit",
-                        "value": "S'abonner"
+                        "value": "Subscribe"
                     }
                 ]
             }
         ]
 
 
-# Test standalone
+# Standalone test
 if __name__ == "__main__":
     from langchain_google_genai import ChatGoogleGenerativeAI
     import os
@@ -285,9 +285,9 @@ if __name__ == "__main__":
     
     agent = FormAgent(llm)
     
-    # Simuler un contexte avec formulaire
+    # Simulate context with form
     test_state = {
-        "messages": [HumanMessage(content="Inscris-toi à la newsletter")],
+        "messages": [HumanMessage(content="Subscribe to the newsletter")],
         "page_content": {
             "forms": [
                 {
@@ -296,13 +296,13 @@ if __name__ == "__main__":
                         {
                             "name": "email",
                             "type": "email",
-                            "placeholder": "Votre email"
+                            "placeholder": "Your email"
                         }
                     ]
                 }
             ]
         },
-        "user_email": "testeur@avn.com",
+        "user_email": "tester@avn.com",
         "response_text": "",
         "needs_confirmation": False,
         "action": {}
@@ -310,16 +310,17 @@ if __name__ == "__main__":
     
     result = agent.process(test_state)
     print("\n" + "="*60)
-    print("RÉSULTAT DU TEST - FORMULAIRE")
+    print("FORM TEST RESULT")
     print("="*60)
-    print(f"\n🤖 Réponse:\n{result['response_text']}")
+    print(f"\n🤖 Response:\n{result['response_text']}")
     print(f"\n🎬 Action:\n{result['action']}")
     
-    # Test de confirmation
+    # Confirmation test
     print("\n" + "="*60)
-    print("TEST CONFIRMATION")
+    print("CONFIRMATION TEST")
     print("="*60)
-    test_state["messages"].append(HumanMessage(content="Oui, soumets le formulaire"))
+    test_state["messages"].append(HumanMessage(content="Yes, submit the form"))
     result2 = agent.process(test_state)
-    print(f"\n🤖 Réponse:\n{result2['response_text']}")
+    print(f"\n🤖 Response:\n{result2['response_text']}")
     print(f"\n🎬 Action:\n{result2['action']}")
+

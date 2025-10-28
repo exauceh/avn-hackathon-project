@@ -1,6 +1,6 @@
 """
-NavigationAgent - Agent spécialisé pour la navigation web
-Cas d'usage #2: Navigation guidée avec confirmation
+NavigationAgent - Specialized agent for web navigation
+Use case #2: Guided navigation with confirmation
 """
 
 from typing import Dict, Any
@@ -9,117 +9,144 @@ import re
 
 
 class NavigationAgent:
-    """Agent pour gérer la navigation et valider les actions"""
+    """Agent to manage navigation and validate actions"""
     
     def __init__(self, llm):
         self.llm = llm
     
     def process(self, state: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Traite une requête de navigation
+        Process a navigation request
         
         Args:
-            state: État actuel du graphe
+            state: Current graph state
         
         Returns:
-            État mis à jour avec l'action de navigation
+            Updated state with navigation action
         """
         
         last_message = state["messages"][-1].content.lower()
         
         print(f"🧭 Navigation: {last_message}")
         
-        # Détecter le type de navigation
-        if any(word in last_message for word in ["ouvre", "lis", "article", "lien"]):
+        # Detect navigation type
+        if any(word in last_message for word in ["open", "read", "article", "link"]):
             return self._handle_link_navigation(state)
         
-        elif any(word in last_message for word in ["retour", "précédent"]):
+        elif any(word in last_message for word in ["back", "previous"]):
             return self._handle_back_navigation(state)
         
-        elif any(word in last_message for word in ["scroll", "descend", "bas"]):
+        elif any(word in last_message for word in ["scroll", "down", "bottom"]):
             return self._handle_scroll(state, direction="down")
         
-        elif any(word in last_message for word in ["haut", "monte"]):
+        elif any(word in last_message for word in ["up", "top", "ascend"]):
             return self._handle_scroll(state, direction="up")
         
         else:
-            # Navigation générique
-            state["response_text"] = "Je n'ai pas compris l'action de navigation souhaitée. Pouvez-vous préciser ?"
+            # Generic navigation
+            state["response_text"] = "I didn't understand the desired navigation action. Could you clarify?"
             state["action"] = {}
         
         return state
     
     def _handle_link_navigation(self, state: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Gère la navigation vers un lien (article, page web)
+        Handle navigation to a link (article, web page)
         """
         
         last_message = state["messages"][-1].content
         search_results = state.get("search_results", [])
         
-        # Déterminer quel article l'utilisateur veut ouvrir
+        print(f"🔍 Analyse du message: '{last_message}'")
+        print(f"📊 {len(search_results)} résultats de recherche disponibles")
+        
+        # Determine which article the user wants to open
         target_url = None
         target_title = None
         
-        # Stratégie 1: Référence explicite (premier, deuxième, etc.)
-        number_match = re.search(r'(premier|deuxième|troisième|1er|2ème|3ème|\d)', last_message.lower())
+        # Strategy 1: Explicit reference (first, second, etc.)
+        # Amélioration: regex plus permissive
+        number_match = re.search(r'\b(first|second|third|1st|2nd|3rd|one|two|three|\d)\b', last_message.lower())
+        
         if number_match and search_results:
             num_str = number_match.group(1)
+            print(f"✅ Numéro détecté: '{num_str}'")
+            
             rank_map = {
-                'premier': 1, '1er': 1,
-                'deuxième': 2, '2ème': 2,
-                'troisième': 3, '3ème': 3
+                'first': 1, '1st': 1, 'one': 1,
+                'second': 2, '2nd': 2, 'two': 2,
+                'third': 3, '3rd': 3, 'three': 3
             }
             rank = rank_map.get(num_str, int(num_str) if num_str.isdigit() else 1)
+            
+            print(f"🎯 Rang calculé: {rank}")
             
             if 0 < rank <= len(search_results):
                 result = search_results[rank - 1]
                 target_url = result['url']
                 target_title = result['title']
+                print(f"✅ Article trouvé: {target_title[:50]}...")
+            else:
+                print(f"⚠️ Rang {rank} hors limites ({len(search_results)} résultats)")
+        else:
+            print(f"⚠️ Aucun numéro détecté dans '{last_message}', utilisation du LLM...")
         
-        # Stratégie 2: Référence par mot-clé (ex: "l'article sur Gemini")
-        elif search_results:
-            # Utiliser le LLM pour matcher le meilleur résultat
+        # Strategy 2: Keyword reference (e.g., "the article about Gemini")
+        if not target_url and search_results:
+            print("🤖 Utilisation du LLM pour identifier l'article...")
+            
+            # Use LLM to match the best result
             results_text = "\n".join([
                 f"{r['rank']}. {r['title']}"
                 for r in search_results
             ])
             
-            system_prompt = """Tu es un assistant qui identifie l'article souhaité.
-L'utilisateur fait référence à un article de la liste.
-Réponds UNIQUEMENT avec le numéro de l'article (1, 2, ou 3).
-Si tu n'es pas sûr, réponds avec 1."""
+            system_prompt = """You are an assistant that identifies the desired article.
+            The user is referring to an article from the list.
+            Respond ONLY with the article number (1, 2, or 3).
+            If you're not sure, respond with 1."""
             
             messages = [
                 SystemMessage(content=system_prompt),
-                HumanMessage(content=f"Articles:\n{results_text}\n\nUtilisateur: {last_message}")
+                HumanMessage(content=f"Articles:\n{results_text}\n\nUser: {last_message}")
             ]
             
             response = self.llm.invoke(messages)
+            print(f"🤖 LLM a répondu: '{response.content}'")
+            
             try:
                 rank = int(response.content.strip())
+                print(f"🎯 Rang LLM: {rank}")
+                
                 if 0 < rank <= len(search_results):
                     result = search_results[rank - 1]
                     target_url = result['url']
                     target_title = result['title']
-            except:
-                # Par défaut, prendre le premier
+                    print(f"✅ Article trouvé via LLM: {target_title[:50]}...")
+                else:
+                    print(f"⚠️ Rang LLM {rank} hors limites")
+            except Exception as e:
+                print(f"❌ Erreur parsing LLM: {e}")
+                # Default to the first one
                 if search_results:
                     result = search_results[0]
                     target_url = result['url']
                     target_title = result['title']
+                    print(f"⚠️ Fallback sur le premier article: {target_title[:50]}...")
         
-        # Si on a trouvé un lien, préparer l'action
+        # If we found a link, prepare the action
         if target_url:
+            print(f"✅ Navigation vers: {target_url}")
+            
             state["action"] = {
                 "type": "navigate",
                 "url": target_url,
-                "method": "click"  # ou "direct" pour window.location
+                "method": "click"
             }
             
             state["response_text"] = (
-                f"C'est confirmé. Je vous emmène sur {target_title}. "
-                f"Voulez-vous que je commence la lecture de l'introduction ?"
+                f"Confirmed. I'm taking you to {target_title}. "
+                f"Would you like me to start reading the introduction?"
             )
             
             state["needs_confirmation"] = True
@@ -128,32 +155,33 @@ Si tu n'es pas sûr, réponds avec 1."""
                 "title": target_title
             }
             
-            # Simuler le nouveau contexte de page (sera mis à jour par le frontend)
+            # Simulate new page context (will be updated by frontend)
             state["current_url"] = target_url
             state["page_title"] = target_title
             
         else:
-            state["response_text"] = "Je n'ai pas pu identifier l'article que vous voulez ouvrir. Pouvez-vous préciser ?"
+            print("❌ Aucun article identifié")
+            state["response_text"] = "I couldn't identify which article you want to open. Could you clarify?"
             state["action"] = {}
         
         return state
     
     def _handle_back_navigation(self, state: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Gère la navigation arrière
+        Handle back navigation
         """
         state["action"] = {
             "type": "navigate",
             "method": "back"
         }
         
-        state["response_text"] = "Je reviens à la page précédente."
+        state["response_text"] = "Going back to the previous page."
         
         return state
     
     def _handle_scroll(self, state: Dict[str, Any], direction: str = "down") -> Dict[str, Any]:
         """
-        Gère le défilement de page
+        Handle page scrolling
         """
         state["action"] = {
             "type": "scroll",
@@ -161,8 +189,8 @@ Si tu n'es pas sûr, réponds avec 1."""
             "amount": 300  # pixels
         }
         
-        direction_text = "vers le bas" if direction == "down" else "vers le haut"
-        state["response_text"] = f"Je fais défiler la page {direction_text}."
+        direction_text = "down" if direction == "down" else "up"
+        state["response_text"] = f"Scrolling the page {direction_text}."
         
         return state
     
@@ -174,25 +202,25 @@ Si tu n'es pas sûr, réponds avec 1."""
         actual_url: str
     ) -> bool:
         """
-        Valide qu'une page s'est bien chargée (pour le cas d'usage #2)
+        Validate that a page loaded correctly (for use case #2)
         
         Args:
-            expected_title: Titre attendu
-            actual_title: Titre réel de la page
-            expected_url: URL attendue
-            actual_url: URL réelle
+            expected_title: Expected title
+            actual_title: Actual page title
+            expected_url: Expected URL
+            actual_url: Actual URL
         
         Returns:
-            True si la page correspond
+            True if the page matches
         """
-        # Vérification simple: l'URL ou le titre correspondent partiellement
+        # Simple check: URL or title partially match
         url_match = expected_url.lower() in actual_url.lower()
         
-        # Extraire les mots clés du titre attendu
+        # Extract keywords from expected title
         expected_keywords = set(expected_title.lower().split())
         actual_keywords = set(actual_title.lower().split())
         
-        # Au moins 30% des mots en commun
+        # At least 30% of words in common
         if expected_keywords:
             overlap = len(expected_keywords & actual_keywords) / len(expected_keywords)
             title_match = overlap >= 0.3
@@ -202,7 +230,7 @@ Si tu n'es pas sûr, réponds avec 1."""
         return url_match or title_match
 
 
-# Test standalone
+# Standalone test
 if __name__ == "__main__":
     from langchain_google_genai import ChatGoogleGenerativeAI
     import os
@@ -217,21 +245,21 @@ if __name__ == "__main__":
     
     agent = NavigationAgent(llm)
     
-    # Simuler des résultats de recherche
+    # Simulate search results
     test_state = {
-        "messages": [HumanMessage(content="Oui, lis l'article sur Gemini")],
+        "messages": [HumanMessage(content="Yes, read the first article")],
         "search_results": [
             {
                 "rank": 1,
-                "title": "Google lance Gemini 2.5 Pro",
+                "title": "Google launches Gemini 2.5 Pro",
                 "url": "https://blog.google/technology/ai/google-gemini-ai/",
-                "snippet": "Google présente Gemini 2.5 Pro..."
+                "snippet": "Google presents Gemini 2.5 Pro..."
             },
             {
                 "rank": 2,
-                "title": "Les régulations de l'IA en Europe",
+                "title": "AI regulations in Europe",
                 "url": "https://europa.eu/ai-act",
-                "snippet": "L'Union Européenne..."
+                "snippet": "The European Union..."
             }
         ],
         "current_url": "",
@@ -244,7 +272,7 @@ if __name__ == "__main__":
     
     result = agent.process(test_state)
     print("\n" + "="*60)
-    print("RÉSULTAT DU TEST - NAVIGATION")
+    print("TEST RESULT - NAVIGATION")
     print("="*60)
-    print(f"\n🤖 Réponse:\n{result['response_text']}")
+    print(f"\n🤖 Response:\n{result['response_text']}")
     print(f"\n🎬 Action:\n{result['action']}")

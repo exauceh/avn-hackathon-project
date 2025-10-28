@@ -2,13 +2,61 @@ const API_URL = 'http://127.0.0.1:8080';
 let currentRequestId = null;
 let pollInterval = null;
 let currentPageContext = {}; // Contexte de la page courante
-let sessionContext = {
-  user_email: 'testeur@avn.com', // Email par défaut pour les démos
-  search_results: []
+
+// Gestion de l'état du graphe en mémoire
+const GRAPH_STATE_KEY = 'avn_graph_state';
+let graphState = {
+  session_id: generateSessionId(),
+  messages: [],
+  user_email: 'testeur@avn.com',
+  search_results: [],
+  user_preferences: {},
+  last_action: null,
+  conversation_history: []
 };
 
+// Charger l'état du graphe depuis le localStorage au démarrage
+function loadGraphState() {
+  chrome.storage.local.get([GRAPH_STATE_KEY], (result) => {
+    if (result[GRAPH_STATE_KEY]) {
+      graphState = { ...graphState, ...result[GRAPH_STATE_KEY] };
+      console.log("📚 État du graphe chargé:", graphState);
+    }
+  });
+}
 
-// ✅ ENVOYER LA TRANSCRIPTION AU SERVEUR AVEC CONTEXTE
+// Sauvegarder l'état du graphe dans le localStorage
+function saveGraphState() {
+  chrome.storage.local.set({ [GRAPH_STATE_KEY]: graphState }, () => {
+    console.log("💾 État du graphe sauvegardé");
+  });
+}
+
+// Générer un ID de session unique
+function generateSessionId() {
+  return `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+}
+
+// Réinitialiser l'état du graphe (nouvelle session)
+function resetGraphState() {
+  graphState = {
+    session_id: generateSessionId(),
+    messages: [],
+    user_email: graphState.user_email, // Conserver l'email
+    search_results: [],
+    user_preferences: {},
+    last_action: null,
+    conversation_history: []
+  };
+  saveGraphState();
+  console.log("🔄 État du graphe réinitialisé");
+}
+
+// Initialiser au démarrage
+loadGraphState();
+
+
+// ✅ ENVOYER LA TRANSCRIPTION AU SERVEUR AVEC CONTEXTE ET ÉTAT DU GRAPHE
 async function sendTranscriptionToServer(transcription) {
   try {
     console.log(`📤 Envoi transcription au serveur...`);
@@ -29,15 +77,45 @@ async function sendTranscriptionToServer(transcription) {
       }
     }
 
-    // Construire le contexte complet
+    // Ajouter le message utilisateur à l'historique du graphe
+    graphState.messages.push({
+      role: 'user',
+      content: transcription,
+      timestamp: new Date().toISOString()
+    });
+
+    graphState.conversation_history.push({
+      type: 'user_message',
+      content: transcription,
+      timestamp: new Date().toISOString(),
+      page_context: {
+        url: currentPageContext.url || '',
+        title: currentPageContext.title || ''
+      }
+    });
+
+    // Construire le contexte complet avec l'état du graphe
     const context = {
       url: currentPageContext.url || '',
       title: currentPageContext.title || '',
       content: currentPageContext,
-      user_email: sessionContext.user_email,
-      search_results: sessionContext.search_results,
-      preferences: {}
+      user_email: graphState.user_email,
+      search_results: graphState.search_results,
+      preferences: graphState.user_preferences,
+      // État complet du graphe pour la mémoire
+      graph_state: {
+        session_id: graphState.session_id,
+        messages: graphState.messages,
+        conversation_history: graphState.conversation_history,
+        last_action: graphState.last_action,
+        search_results: graphState.search_results  // ✅ Explicit
+      }
     };
+
+    console.log(`📤 Envoi contexte:`);
+    console.log(`   - Session: ${context.graph_state.session_id}`);
+    console.log(`   - Messages: ${context.graph_state.messages.length}`);
+    console.log(`   - Search results: ${context.graph_state.search_results.length}`);
 
     const response = await fetch(`${API_URL}/process`, {
       method: 'POST',
@@ -57,6 +135,9 @@ async function sendTranscriptionToServer(transcription) {
 
     const data = await response.json();
     currentRequestId = data.request_id;
+
+    // Sauvegarder l'état après l'envoi
+    saveGraphState();
 
     // Démarrer le polling pour la réponse de l'agent
     startPolling(data.request_id);
@@ -124,15 +205,47 @@ function startPolling(requestId) {
 async function handleAgentResponse(data) {
   console.log("🤖 Réponse agent:", data);
 
-  // Mettre à jour le contexte de session
-  if (data.search_results && data.search_results.length > 0) {
-    sessionContext.search_results = data.search_results;
+  // Mettre à jour l'état du graphe avec la réponse
+  if (data.text) {
+    graphState.messages.push({
+      role: 'assistant',
+      content: data.text,
+      timestamp: new Date().toISOString()
+    });
+
+    graphState.conversation_history.push({
+      type: 'agent_response',
+      content: data.text,
+      action: data.action || null,
+      timestamp: new Date().toISOString()
+    });
   }
 
-  // Exécuter l'action si présente
+  // Mettre à jour les résultats de recherche
+  if (data.search_results && data.search_results.length > 0) {
+    graphState.search_results = data.search_results;
+    console.log(`🔍 ${data.search_results.length} résultats stockés dans graphState`);
+  }
+
+  // ✅ EXTRAIRE search_results depuis action.data si présents (SearchAgent)
+  if (data.action && data.action.type === 'info' && data.action.data) {
+    if (Array.isArray(data.action.data)) {
+      graphState.search_results = data.action.data;
+      console.log(`🔍 ${data.action.data.length} résultats extraits depuis action.data`);
+    }
+  }
+
+  // Mettre à jour la dernière action
   if (data.action && data.action.type) {
+    graphState.last_action = {
+      ...data.action,
+      timestamp: new Date().toISOString()
+    };
     await executeAgentAction(data.action);
   }
+
+  // Sauvegarder l'état mis à jour
+  saveGraphState();
 
   // Jouer l'audio
   if (data.audio) {
@@ -148,26 +261,37 @@ async function executeAgentAction(action) {
   console.log("🎬 Exécution action:", action);
 
   try {
-    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (!tabs[0]) {
-      console.warn("⚠️ Aucun onglet actif");
-      return;
-    }
-
-    const tabId = tabs[0].id;
-
     switch (action.type) {
       case 'navigate':
         if (action.url) {
-          // Naviguer vers l'URL
-          await chrome.tabs.update(tabId, { url: action.url });
-          console.log(`✅ Navigation vers: ${action.url}`);
+          // Naviguer vers l'URL - méthode plus robuste
+          try {
+            // Essayer d'abord avec l'onglet actif
+            const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+
+            if (tabs && tabs[0]) {
+              await chrome.tabs.update(tabs[0].id, { url: action.url });
+              console.log(`✅ Navigation vers: ${action.url}`);
+            } else {
+              // Fallback: créer un nouvel onglet
+              await chrome.tabs.create({ url: action.url });
+              console.log(`✅ Nouvel onglet créé: ${action.url}`);
+            }
+          } catch (error) {
+            console.error("❌ Erreur navigation:", error);
+            // Dernier fallback: créer un nouvel onglet
+            await chrome.tabs.create({ url: action.url });
+            console.log(`✅ Nouvel onglet créé (fallback): ${action.url}`);
+          }
         } else if (action.method === 'back') {
           // Retour en arrière (via content script)
-          await chrome.tabs.sendMessage(tabId, {
-            action: 'execute_dom_action',
-            actionData: action
-          });
+          const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+          if (tabs && tabs[0]) {
+            await chrome.tabs.sendMessage(tabs[0].id, {
+              action: 'execute_dom_action',
+              actionData: action
+            });
+          }
         }
         break;
 
@@ -175,11 +299,16 @@ async function executeAgentAction(action) {
       case 'fill_and_submit':
       case 'scan_forms':
         // Déléguer au content script
-        await chrome.tabs.sendMessage(tabId, {
-          action: 'execute_dom_action',
-          actionData: action
-        });
-        console.log(`✅ Action ${action.type} envoyée au content script`);
+        const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+        if (tabs && tabs[0]) {
+          await chrome.tabs.sendMessage(tabs[0].id, {
+            action: 'execute_dom_action',
+            actionData: action
+          });
+          console.log(`✅ Action ${action.type} envoyée au content script`);
+        } else {
+          console.warn("⚠️ Aucun onglet actif pour", action.type);
+        }
         break;
 
       case 'info':
@@ -236,6 +365,27 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     chrome.runtime.sendMessage({
       action: 'tts_finished'
     }).catch(() => { });
+    sendResponse({ ok: true });
+    return true;
+  }
+
+  // Récupérer l'état du graphe
+  if (message.action === 'get_graph_state') {
+    sendResponse({ state: graphState });
+    return true;
+  }
+
+  // Réinitialiser l'état du graphe (nouvelle session)
+  if (message.action === 'reset_graph_state') {
+    resetGraphState();
+    sendResponse({ ok: true, session_id: graphState.session_id });
+    return true;
+  }
+
+  // Mettre à jour l'email utilisateur
+  if (message.action === 'set_user_email') {
+    graphState.user_email = message.email;
+    saveGraphState();
     sendResponse({ ok: true });
     return true;
   }

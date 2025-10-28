@@ -36,6 +36,22 @@ def process_text():
         print(f"🌐 Contexte URL: {context.get('url', 'N/A')}")
         print(f"📄 Titre: {context.get('title', 'N/A')}")
         
+        # Récupérer le graph_state depuis le contexte
+        graph_state = context.get('graph_state', None)
+        if graph_state:
+            session_id = graph_state.get('session_id', request_id)
+            print(f"📚 État du graphe reçu: {len(graph_state.get('messages', []))} messages")
+            print(f"🔑 Session ID: {session_id}")
+            
+            # Stocker l'état du graphe côté serveur (backup optionnel)
+            with storage.graph_states_lock:
+                storage.graph_states[session_id] = {
+                    "state": graph_state,
+                    "timestamp": time.time()
+                }
+        else:
+            print("⚠️ Aucun état du graphe fourni")
+        
         with storage.pending_lock:
             storage.pending_responses[request_id] = {
                 "status": "waiting",
@@ -104,11 +120,42 @@ def get_audio_response(request_id):
     # Toujours en attente
     return jsonify({"status": "waiting"}), 202
 
+@app.route('/graph_state/<session_id>', methods=['GET'])
+def get_graph_state(session_id):
+    """Récupère l'état du graphe pour une session"""
+    with storage.graph_states_lock:
+        state_data = storage.graph_states.get(session_id)
+    
+    if not state_data:
+        return jsonify({"error": "Session not found"}), 404
+    
+    # Vérifier timeout
+    if time.time() - state_data["timestamp"] > storage.GRAPH_STATE_TIMEOUT:
+        with storage.graph_states_lock:
+            if session_id in storage.graph_states:
+                del storage.graph_states[session_id]
+        return jsonify({"error": "Session expired"}), 410
+    
+    return jsonify(state_data["state"])
+
+@app.route('/graph_state/<session_id>', methods=['DELETE'])
+def delete_graph_state(session_id):
+    """Supprime l'état du graphe pour une session"""
+    with storage.graph_states_lock:
+        if session_id in storage.graph_states:
+            del storage.graph_states[session_id]
+            print(f"🗑️ État du graphe supprimé: {session_id}")
+            return jsonify({"ok": True})
+    
+    return jsonify({"error": "Session not found"}), 404
+
 def cleanup_old_responses():
-    """Nettoie les réponses expirées"""
+    """Nettoie les réponses et états de graphe expirés"""
     while True:
         time.sleep(10)
         now = time.time()
+        
+        # Nettoyer les réponses expirées
         with storage.pending_lock:
             expired = [
                 req_id for req_id, resp in storage.pending_responses.items()
@@ -118,6 +165,17 @@ def cleanup_old_responses():
                 age = now - storage.pending_responses[req_id]['timestamp']
                 print(f"🗑️ Nettoyage requête expirée: {req_id} (age: {age:.1f}s)")
                 del storage.pending_responses[req_id]
+        
+        # Nettoyer les états de graphe expirés
+        with storage.graph_states_lock:
+            expired_states = [
+                session_id for session_id, state_data in storage.graph_states.items()
+                if now - state_data["timestamp"] > storage.GRAPH_STATE_TIMEOUT
+            ]
+            for session_id in expired_states:
+                age = now - storage.graph_states[session_id]['timestamp']
+                print(f"🗑️ Nettoyage état graphe expiré: {session_id} (age: {age:.1f}s)")
+                del storage.graph_states[session_id]
 
 if __name__ == '__main__':
     print("\n" + "="*60)

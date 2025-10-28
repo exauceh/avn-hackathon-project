@@ -1,8 +1,9 @@
 """
-Graphe ADK Principal - Agent de Navigation Vocale
-Architecture basée sur LangGraph pour orchestrer les agents spécialisés
+Main ADK Graph - Voice Navigation Agent
+LangGraph-based architecture to orchestrate specialized agents
 """
-    # Charger les variables d'environnement
+# Load environment variables
+import time
 from dotenv import load_dotenv
 import os
 from typing import TypedDict, Annotated, List, Dict, Any, Literal
@@ -12,7 +13,7 @@ from langchain_openai import ChatOpenAI
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 
-# Import des agents spécialisés
+# Import specialized agents
 from search_agent import SearchAgent
 from navigation_agent import NavigationAgent
 from form_agent import FormAgent
@@ -20,46 +21,47 @@ from form_agent import FormAgent
 load_dotenv()
 
 class AgentState(TypedDict):
-    """État partagé entre tous les agents"""
-    # Messages de conversation
-    messages: Annotated[List[Any], "Liste des messages de conversation"]
+    """State shared between all agents"""
+    # Conversation messages
+    messages: Annotated[List[Any], "List of conversation messages"]
     
-    # Contexte de navigation
+    # Navigation context
     current_url: str
     page_title: str
     page_content: Dict[str, Any]
     
-    # Résultats de recherche
+    # Search results
     search_results: List[Dict[str, Any]]
     selected_article: Dict[str, Any]
     
-    # Contexte utilisateur
+    # User context
     user_email: str
     user_preferences: Dict[str, Any]
     
-    # Prochain agent à exécuter
+    # Next agent to execute
     next_agent: str
     
-    # Action à exécuter
+    # Action to execute
     action: Dict[str, Any]
     
-    # Réponse finale
+    # Final response
     response_text: str
     needs_confirmation: bool
 
 google_api_key = os.getenv("GOOGLE_API_KEY")
 print(f"DEBUG: GOOGLE_API_KEY loaded: {google_api_key is not None}")
+
 class AVNGraphAgent:
-    """Agent orchestrateur principal utilisant LangGraph"""
+    """Main orchestrator agent using LangGraph"""
     
     def __init__(self, use_openai: bool = False):
         """
-        Initialise le graphe d'agents
+        Initialize the agent graph
         
         Args:
-            use_openai: Si True, utilise OpenAI, sinon Google Gemini
+            use_openai: If True, uses OpenAI, otherwise Google Gemini
         """
-        # Configuration du LLM
+        # LLM configuration
         if use_openai:
             self.llm = ChatOpenAI(
                 model="gpt-4o-mini",
@@ -73,31 +75,31 @@ class AVNGraphAgent:
                 api_key=os.getenv("GOOGLE_API_KEY")
             )
         
-        # Initialiser les agents spécialisés
+        # Initialize specialized agents
         self.search_agent = SearchAgent(self.llm)
         self.navigation_agent = NavigationAgent(self.llm)
         self.form_agent = FormAgent(self.llm)
         
-        # Construire le graphe
+        # Build the graph
         self.graph = self._build_graph()
     
     def _build_graph(self) -> StateGraph:
-        """Construit le graphe de workflow avec LangGraph"""
+        """Build the workflow graph with LangGraph"""
         
-        # Créer le graphe
+        # Create the graph
         workflow = StateGraph(AgentState)
         
-        # Ajouter les nœuds (agents)
+        # Add nodes (agents)
         workflow.add_node("router", self._route_request)
         workflow.add_node("search", self._handle_search)
         workflow.add_node("navigation", self._handle_navigation)
         workflow.add_node("form", self._handle_form)
         workflow.add_node("response", self._generate_response)
         
-        # Définir les transitions
+        # Define transitions
         workflow.set_entry_point("router")
         
-        # Router vers les agents spécialisés
+        # Route to specialized agents
         workflow.add_conditional_edges(
             "router",
             self._decide_next_agent,
@@ -109,41 +111,43 @@ class AVNGraphAgent:
             }
         )
         
-        # Tous les agents peuvent mener à la réponse
+        # All agents can lead to response
         workflow.add_edge("search", "response")
         workflow.add_edge("navigation", "response")
         workflow.add_edge("form", "response")
         workflow.add_edge("response", END)
         
-        # Compiler le graphe avec checkpoints pour la mémoire
+        # Compile the graph with checkpoints for memory
         memory = MemorySaver()
         return workflow.compile(checkpointer=memory)
     
     def _route_request(self, state: AgentState) -> AgentState:
-        """Analyse la requête et détermine quel agent doit la traiter"""
+        """Analyze the request and determine which agent should handle it"""
         
         last_message = state["messages"][-1].content if state["messages"] else ""
         
-        # Créer un prompt pour le routeur
-        system_prompt = """Tu es un routeur intelligent pour un assistant vocal.
-Analyse la requête de l'utilisateur et détermine quelle action effectuer:
+        # Create a prompt for the router
+        system_prompt = """
+        You are an intelligent router for a voice assistant.
+        Analyze the user's request and determine which action to perform:
 
-- SEARCH: Si l'utilisateur demande une recherche (ex: "recherche", "trouve", "cherche")
-- NAVIGATION: Si l'utilisateur veut naviguer ou ouvrir un lien (ex: "ouvre", "va sur", "lis l'article")
-- FORM: Si l'utilisateur veut remplir un formulaire (ex: "inscris", "remplis", "soumets")
-- RESPONSE: Pour toutes les autres questions ou confirmations
+        - SEARCH: If the user requests a search (e.g., "search", "find", "look for")
+        - NAVIGATION: If the user wants to navigate or open a link (e.g., "open", "go to", "read the article")
+        - FORM: If the user wants to fill out a form (e.g., "register", "fill", "submit")
+        - RESPONSE: For all other questions or confirmations
 
-Réponds UNIQUEMENT avec l'un de ces mots: SEARCH, NAVIGATION, FORM, ou RESPONSE"""
+        Respond ONLY with one of these words: SEARCH, NAVIGATION, FORM, or RESPONSE
+        """
         
         messages = [
             SystemMessage(content=system_prompt),
-            HumanMessage(content=f"Requête utilisateur: {last_message}")
+            HumanMessage(content=f"User request: {last_message}")
         ]
         
         response = self.llm.invoke(messages)
         decision = response.content.strip().upper()
         
-        # Mapper vers les noms d'agents
+        # Map to agent names
         agent_map = {
             "SEARCH": "search",
             "NAVIGATION": "navigation",
@@ -157,36 +161,38 @@ Réponds UNIQUEMENT avec l'un de ces mots: SEARCH, NAVIGATION, FORM, ou RESPONSE
         return state
     
     def _decide_next_agent(self, state: AgentState) -> str:
-        """Décide quel agent exécuter ensuite"""
+        """Decide which agent to execute next"""
         return state.get("next_agent", "response")
     
     def _handle_search(self, state: AgentState) -> AgentState:
-        """Délègue au SearchAgent"""
-        print("🔍 Exécution SearchAgent...")
+        """Delegate to SearchAgent"""
+        print("🔍 Executing SearchAgent...")
         return self.search_agent.process(state)
     
     def _handle_navigation(self, state: AgentState) -> AgentState:
-        """Délègue au NavigationAgent"""
-        print("🧭 Exécution NavigationAgent...")
+        """Delegate to NavigationAgent"""
+        print("🧭 Executing NavigationAgent...")
         return self.navigation_agent.process(state)
     
     def _handle_form(self, state: AgentState) -> AgentState:
-        """Délègue au FormAgent"""
-        print("📝 Exécution FormAgent...")
+        """Delegate to FormAgent"""
+        print("📝 Executing FormAgent...")
         return self.form_agent.process(state)
     
     def _generate_response(self, state: AgentState) -> AgentState:
-        """Génère la réponse finale pour l'utilisateur"""
+        """Generate the final response for the user"""
         
-        # Si une réponse a déjà été générée par un agent, la retourner
+        # If a response was already generated by an agent, return it
         if state.get("response_text"):
             return state
         
-        # Sinon, générer une réponse par défaut
+        # Otherwise, generate a default response
         last_message = state["messages"][-1].content if state["messages"] else ""
         
-        system_prompt = """Tu es AVN, un assistant vocal pour personnes malvoyantes.
-Réponds de manière concise et claire. Mentionne toujours les actions que tu as effectuées."""
+        system_prompt = """
+        You are AVN, a voice assistant for visually impaired people.
+        Respond concisely and clearly. Always mention the actions you have performed.
+        """
         
         messages = [
             SystemMessage(content=system_prompt),
@@ -203,83 +209,141 @@ Réponds de manière concise et claire. Mentionne toujours les actions que tu as
         self,
         user_message: str,
         context: Dict[str, Any] = None,
-        session_id: str = "default"
+        session_id: str = "default",
+        graph_state: Dict[str, Any] = None
     ) -> Dict[str, Any]:
         """
-        Traite une requête utilisateur
+        Process a user voice request
         
         Args:
-            user_message: Message de l'utilisateur
-            context: Contexte additionnel (page courante, etc.)
-            session_id: ID de session pour la mémoire
+            user_message: User transcribed text
+            context: Page context (URL, title, content)
+            session_id: Unique session identifier
+            graph_state: État du graphe depuis le frontend (historique, résultats)
         
         Returns:
-            Dict contenant la réponse et les actions à effectuer
+            Dictionary with response, action, and audio
         """
         
-        # Initialiser l'état
-        initial_state: AgentState = {
+        print(f"\n{'='*60}")
+        print(f"🎤 Voice request: {user_message}")
+        print(f"🔑 Session: {session_id}")
+        if graph_state:
+            print(f"📚 Graph state: {len(graph_state.get('messages', []))} messages")
+            print(f"🔍 Search results: {len(graph_state.get('search_results', []))} results")
+        print("="*60)
+        
+        context = context or {}
+        
+        # Initialize state
+        initial_state = {
             "messages": [HumanMessage(content=user_message)],
-            "current_url": context.get("url", "") if context else "",
-            "page_title": context.get("title", "") if context else "",
-            "page_content": context.get("content", {}) if context else {},
+            "current_url": context.get("url", ""),
+            "page_title": context.get("title", ""),
+            "page_content": context.get("content", {}),
             "search_results": [],
             "selected_article": {},
-            "user_email": context.get("user_email", "user@avn.com") if context else "user@avn.com",
-            "user_preferences": context.get("preferences", {}) if context else {},
+            "user_email": context.get("user_email", "user@example.com"),
+            "user_preferences": context.get("preferences", {}),
             "next_agent": "",
             "action": {},
             "response_text": "",
             "needs_confirmation": False
         }
         
-        # Exécuter le graphe
-        config = {"configurable": {"thread_id": session_id}}
-        final_state = self.graph.invoke(initial_state, config)
+        # ✅ RESTAURER L'HISTORIQUE DEPUIS LE GRAPH_STATE
+        if graph_state:
+            # Restaurer les derniers messages (limiter à 10 pour éviter un contexte trop grand)
+            previous_messages = graph_state.get("messages", [])
+            if previous_messages:
+                print(f"📚 Restauration de {len(previous_messages)} messages d'historique")
+                
+                # Convertir les messages du graph_state en objets LangChain
+                restored_messages = []
+                for msg in previous_messages[-10:]:  # Limiter aux 10 derniers
+                    role = msg.get("role", "user")
+                    content = msg.get("content", "")
+                    
+                    if role == "user":
+                        restored_messages.append(HumanMessage(content=content))
+                    elif role == "assistant":
+                        restored_messages.append(AIMessage(content=content))
+                
+                # Ajouter le nouveau message de l'utilisateur
+                restored_messages.append(HumanMessage(content=user_message))
+                initial_state["messages"] = restored_messages
+            
+            # ✅ RESTAURER LES RÉSULTATS DE RECHERCHE
+            search_results_from_state = graph_state.get("search_results", [])
+            if search_results_from_state:
+                initial_state["search_results"] = search_results_from_state
+                print(f"🔍 Restauré {len(initial_state['search_results'])} résultats de recherche depuis graph_state")
+                
+                # Debug: afficher les titres
+                for i, result in enumerate(initial_state["search_results"][:3], 1):
+                    print(f"   {i}. {result.get('title', 'N/A')[:60]}")
+            else:
+                print(f"⚠️ Aucun search_results dans graph_state")
+            
+            # ✅ RESTAURER L'EMAIL ET LES PRÉFÉRENCES
+            if graph_state.get("user_email"):
+                initial_state["user_email"] = graph_state["user_email"]
+            
+            if graph_state.get("user_preferences"):
+                initial_state["user_preferences"] = graph_state["user_preferences"]
         
-        # Retourner le résultat
+        # Execute the graph
+        config = {"configurable": {"thread_id": session_id}}
+        
+        print(f"\n🚀 Executing graph with {len(initial_state['messages'])} messages...")
+        print(f"🔍 Search results available: {len(initial_state['search_results'])}")
+        
+        start_time = time.time()
+        final_state = self.graph.invoke(initial_state, config)
+        elapsed = time.time() - start_time
+        
+        print(f"⏱️ Processing time: {elapsed:.2f}s")
+        print(f"🤖 Response: {final_state.get('response_text', '')[:100]}...")
+        
         return {
-            "text": final_state.get("response_text", ""),
+            "text": final_state.get("response_text", "No response generated"),
             "action": final_state.get("action", {}),
             "needs_confirmation": final_state.get("needs_confirmation", False),
             "search_results": final_state.get("search_results", []),
-            "context": {
-                "url": final_state.get("current_url", ""),
-                "title": final_state.get("page_title", "")
-            }
+            "session_id": session_id
         }
 
 
-# Point d'entrée pour tester le graphe
+# Entry point to test the graph
 if __name__ == "__main__":
     import sys
     
-    # Charger les variables d'environnement
+    # Load environment variables
     from dotenv import load_dotenv
     load_dotenv()
     
-    # Créer l'agent
+    # Create the agent
     agent = AVNGraphAgent(use_openai=False)
     
-    # Tests des cas d'usage
+    # Use case tests
     print("\n" + "="*60)
-    print("TEST CAS D'USAGE #1: Recherche et Résumé")
+    print("TEST USE CASE #1: Search and Summary")
     print("="*60)
     result = agent.process_request(
-        "Recherche les dernières nouvelles sur l'intelligence artificielle"
+        "Search for the latest news on artificial intelligence"
     )
-    print(f"\n🤖 Réponse: {result['text']}")
+    print(f"\n🤖 Response: {result['text']}")
     print(f"🎬 Action: {result['action']}")
     
     if result.get('search_results'):
         print("\n" + "="*60)
-        print("TEST CAS D'USAGE #2: Navigation Guidée")
+        print("TEST USE CASE #2: Guided Navigation")
         print("="*60)
         result2 = agent.process_request(
-            "Oui, lis l'article sur Gemini",
+            "Yes, read the article on Gemini",
             context={
                 "search_results": result['search_results']
             }
         )
-        print(f"\n🤖 Réponse: {result2['text']}")
+        print(f"\n🤖 Response: {result2['text']}")
         print(f"🎬 Action: {result2['action']}")

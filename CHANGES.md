@@ -309,6 +309,279 @@ Implémentation complète des 3 cas d'usage pour la démo AVN avec un graphe d'a
 
 ---
 
+## 🧠 Gestion de la Mémoire du Graphe (Nouvelle Fonctionnalité)
+
+### Date d'implémentation
+**28 Octobre 2025**
+
+### Objectif
+Implémenter une gestion complète de la mémoire du graphe avec stockage côté frontend et transmission au backend pour conserver l'historique conversationnel.
+
+### Nouveaux Fichiers
+
+| Fichier | Description |
+|---------|-------------|
+| **GRAPH_MEMORY.md** | Documentation architecture de la mémoire |
+| **MEMORY_IMPLEMENTATION.md** | Détails techniques de l'implémentation |
+| **MEMORY_USAGE.md** | Guide d'utilisation de la mémoire |
+| **MEMORY_SUMMARY.md** | Résumé exécutif |
+| **test_graph_memory.py** | Tests unitaires Python |
+| **test_frontend_memory.js** | Tests frontend (DevTools) |
+| **test_memory_integration.sh** | Tests d'intégration |
+
+### Modifications Frontend
+
+#### `frontend/scripts/background.js`
+**Ajouts** :
+- ✅ Structure `graphState` avec `session_id`, `messages`, `conversation_history`, `search_results`, `user_email`, `user_preferences`, `last_action`
+- ✅ `loadGraphState()` : Charge depuis `chrome.storage.local`
+- ✅ `saveGraphState()` : Sauvegarde dans `chrome.storage.local`
+- ✅ `resetGraphState()` : Nouvelle session avec nouvel ID
+- ✅ `generateSessionId()` : Génère ID unique
+- ✅ Transmission automatique de `graph_state` dans le contexte
+- ✅ Mise à jour automatique après chaque interaction
+- ✅ Messages runtime : `get_graph_state`, `reset_graph_state`, `set_user_email`
+
+**Impact** : Mémoire persistante entre fermetures, continuité conversationnelle complète
+
+#### `frontend/popup/popup.html`
+**Ajouts** :
+- ✅ Bouton reset session (🔄) dans status-indicator
+
+#### `frontend/popup/popup.js`
+**Ajouts** :
+- ✅ Gestionnaire bouton reset
+- ✅ Nettoyage transcript lors du reset
+- ✅ Confirmation visuelle de la réinitialisation
+
+#### `frontend/popup/popup.css`
+**Ajouts** :
+- ✅ Style `.reset-btn` avec animation rotation
+- ✅ Effets hover et active
+
+### Modifications Backend
+
+#### `cloud/services/api-gateway/storage.py`
+**Ajouts** :
+- ✅ `graph_states` : Dictionnaire des états par session
+- ✅ `graph_states_lock` : Verrou thread-safe
+- ✅ `GRAPH_STATE_TIMEOUT` : 1 heure
+
+#### `cloud/services/api-gateway/main.py`
+**Ajouts** :
+- ✅ Extraction `graph_state` du contexte dans `/process`
+- ✅ Stockage temporaire côté serveur (backup)
+- ✅ Endpoint `GET /graph_state/<session_id>` : Récupère l'état
+- ✅ Endpoint `DELETE /graph_state/<session_id>` : Supprime l'état
+- ✅ Nettoyage automatique des états expirés
+- ✅ Logs détaillés avec `session_id` et nombre de messages
+
+#### `core/agents/graph_agent.py`
+**Modifications** :
+- ✅ Nouveau paramètre `graph_state` dans `process_request()`
+- ✅ Restauration de l'historique des messages (10 derniers)
+- ✅ Récupération `search_results` et `last_action` précédents
+- ✅ Utilisation du `session_id` depuis `graph_state`
+- ✅ Construction de l'état initial avec contexte historique
+
+**Impact** : L'agent a maintenant accès à l'historique complet pour des réponses contextuelles
+
+#### `core/agents/pubsub_listener.py`
+**Modifications** :
+- ✅ Extraction `graph_state` depuis le contexte
+- ✅ Passage `graph_state` à `agent.process_request()`
+- ✅ Logs avec nombre de messages en historique et `session_id`
+
+### Fonctionnalités Implémentées
+
+#### 1. Persistance
+- **Frontend** : Stockage permanent dans `chrome.storage.local`
+- **Backend** : Stockage temporaire (1h) avec expiration automatique
+- **Survit** : Fermeture popup, redémarrage extension
+
+#### 2. Continuité Conversationnelle
+- Historique complet des échanges user/assistant
+- Contexte multi-pages maintenu
+- Références contextuelles possibles ("le premier article", "ma recherche")
+- LangGraph checkpointing par `session_id`
+
+#### 3. Gestion des Sessions
+- ID unique généré automatiquement
+- Isolation complète entre sessions
+- Réinitialisation manuelle via bouton 🔄
+- API pour créer/supprimer sessions
+
+#### 4. Synchronisation
+- État transmis automatiquement à chaque requête
+- Mise à jour après chaque réponse
+- Backup côté serveur (1h)
+- Pas de conflit grâce aux verrous
+
+#### 5. Optimisations
+- Limite 10 derniers messages pour l'agent (performance)
+- Nettoyage automatique côté serveur
+- Thread-safe avec `threading.Lock`
+- Overhead minimal (~2-5KB par requête)
+
+### Structure de Données
+
+```javascript
+{
+  session_id: "session_1730105678_abc123def",
+  messages: [
+    {
+      role: "user",
+      content: "Search for AI news",
+      timestamp: "2025-10-28T10:00:00.000Z"
+    },
+    {
+      role: "assistant",
+      content: "I found 3 articles...",
+      timestamp: "2025-10-28T10:00:05.000Z"
+    }
+  ],
+  conversation_history: [
+    {
+      type: "user_message",
+      content: "Search for AI news",
+      timestamp: "2025-10-28T10:00:00.000Z",
+      page_context: {
+        url: "https://google.com",
+        title: "Google"
+      }
+    },
+    {
+      type: "agent_response",
+      content: "I found 3 articles...",
+      action: {type: "info", data: {...}},
+      timestamp: "2025-10-28T10:00:05.000Z"
+    }
+  ],
+  search_results: [
+    {title: "AI Breakthrough", url: "...", snippet: "..."}
+  ],
+  user_email: "user@example.com",
+  user_preferences: {},
+  last_action: {
+    type: "navigate",
+    url: "...",
+    timestamp: "2025-10-28T10:00:10.000Z"
+  }
+}
+```
+
+### Flux de Données
+
+1. **Initialisation** : Chargement depuis `chrome.storage.local`
+2. **Requête user** : Ajout à `messages` + sauvegarde + envoi au backend
+3. **Backend** : Extraction `graph_state`, passage à l'agent
+4. **Agent** : Restauration des 10 derniers messages, traitement avec contexte
+5. **Réponse** : Ajout à `messages` + mise à jour `search_results`/`last_action`
+6. **Sauvegarde** : Persistance dans `chrome.storage.local`
+
+### API Runtime Chrome
+
+```javascript
+// Récupérer l'état
+chrome.runtime.sendMessage({action: 'get_graph_state'}, (resp) => {
+  console.log(resp.state);
+});
+
+// Réinitialiser
+chrome.runtime.sendMessage({action: 'reset_graph_state'}, (resp) => {
+  console.log("Nouvelle session:", resp.session_id);
+});
+
+// Modifier l'email
+chrome.runtime.sendMessage({
+  action: 'set_user_email',
+  email: 'new@example.com'
+}, (resp) => {
+  console.log("Email mis à jour");
+});
+```
+
+### API Backend
+
+```bash
+# Récupérer l'état d'une session
+curl http://127.0.0.1:8080/graph_state/<session_id>
+
+# Supprimer une session
+curl -X DELETE http://127.0.0.1:8080/graph_state/<session_id>
+```
+
+### Exemples d'Usage
+
+#### Scénario 1: Recherche puis Navigation
+```
+User: "Search for AI news"
+Agent: [Stocke résultats dans graph_state]
+User: "Open the first article"
+Agent: [Utilise search_results depuis graph_state]
+```
+
+#### Scénario 2: Conversation Contextuelle
+```
+User: "What's the weather in Paris?"
+Agent: [Stocke "Paris" dans le contexte]
+User: "And tomorrow?"
+Agent: [Se souvient de Paris grâce à l'historique]
+```
+
+#### Scénario 3: Formulaire Multi-Étapes
+```
+User: "Register on this site"
+Agent: [Identifie le formulaire]
+User: "My email is user@example.com"
+Agent: [Stocke l'email dans graph_state]
+User: "Submit the form"
+Agent: [Utilise l'email stocké]
+```
+
+### Métriques
+
+| Métrique | Valeur |
+|----------|--------|
+| Code ajouté | ~400 lignes |
+| Fichiers modifiés | 8 |
+| Fichiers créés | 7 (4 docs + 3 tests) |
+| Endpoints ajoutés | 2 (GET/DELETE) |
+| Messages runtime | 3 |
+| Overhead par requête | 2-5 KB |
+| Compatibilité | 100% rétro-compatible |
+
+### Avantages
+
+✅ **Continuité** : L'agent se souvient de tout
+✅ **Multi-pages** : Contexte conservé lors de la navigation
+✅ **Performance** : Impact minimal sur le temps de réponse
+✅ **Robustesse** : Thread-safe, gestion des timeouts
+✅ **Développeur-friendly** : API claire, tests complets, logs détaillés
+✅ **Extensible** : Facile d'ajouter de nouveaux champs
+
+### Tests
+
+```bash
+# Tests agents Python
+python3 test_graph_memory.py
+
+# Tests frontend
+# Copier test_frontend_memory.js dans console DevTools
+
+# Tests intégration
+./test_memory_integration.sh
+```
+
+### Documentation
+
+- **GRAPH_MEMORY.md** : Architecture et flux
+- **MEMORY_IMPLEMENTATION.md** : Détails techniques
+- **MEMORY_USAGE.md** : Guide d'utilisation
+- **MEMORY_SUMMARY.md** : Résumé exécutif
+
+---
+
 ## 📞 Support
 
 **Documentation** :

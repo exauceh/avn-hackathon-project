@@ -37,15 +37,16 @@ def text_to_speech(text: str) -> str:
         synthesis_input = texttospeech.SynthesisInput(text=text)
         
         voice = texttospeech.VoiceSelectionParams(
-            language_code="fr-FR",
-            name="fr-FR-Neural2-A",  # Voix féminine naturelle
+            # 💡 Correction du code de langue pour l'anglais américain
+            language_code="en-US", 
+            name="en-US-Studio-O",       
             ssml_gender=texttospeech.SsmlVoiceGender.FEMALE
         )
         
         audio_config = texttospeech.AudioConfig(
             audio_encoding=texttospeech.AudioEncoding.MP3,
-            speaking_rate=1.0,
-            pitch=0.0
+            speaking_rate=1.0, # 1.0 est la vitesse normale (ralentissez si besoin)
+            pitch=0.0         # 0.0 est la hauteur normale
         )
         
         response = tts_client.synthesize_speech(
@@ -80,23 +81,38 @@ def process_message(message: pubsub_v1.subscriber.message.Message):
         print(f"\n{'='*60}")
         print(f"📩 Message reçu: {request_id}")
         print(f"📝 Transcription: {transcription}")
-        print(f"🌐 Contexte: {context}")
+        print(f"🌐 Contexte: {context.get('url', 'N/A')}")
+        
+        # Récupérer le graph_state depuis le contexte
+        graph_state = context.get("graph_state", None)
+        if graph_state:
+            print(f"📚 État du graphe reçu: {len(graph_state.get('messages', []))} messages en historique")
+            print(f"🔑 Session ID: {graph_state.get('session_id', 'N/A')}")
+            print(f"🔍 Search results dans graph_state: {len(graph_state.get('search_results', []))}")
+            if graph_state.get('search_results'):
+                for i, r in enumerate(graph_state['search_results'][:3], 1):
+                    print(f"   {i}. {r.get('title', 'N/A')[:60]}")
+        else:
+            print("⚠️ Aucun état du graphe fourni")
+        
         print("="*60)
         
         # Acquitter le message immédiatement
         message.ack()
         
-        # Traiter avec l'agent ADK
+        # Traiter avec l'agent ADK en passant le graph_state
         start_time = time.time()
         result = adk_agent.process_request(
             user_message=transcription,
             context=context,
-            session_id=request_id
+            session_id=graph_state.get("session_id", request_id) if graph_state else request_id,
+            graph_state=graph_state
         )
         processing_time = time.time() - start_time
         
         print(f"\n⏱️ Temps de traitement: {processing_time:.2f}s")
         print(f"🤖 Réponse: {result['text'][:100]}...")
+        print(f"🔍 Search results dans la réponse: {len(result.get('search_results', []))}")
         
         # Générer l'audio
         print("🔊 Génération audio...")
@@ -115,6 +131,13 @@ def process_message(message: pubsub_v1.subscriber.message.Message):
             "search_results": result.get('search_results', []),
             "context": result.get('context', {})
         }
+        
+        print(f"📤 Données publiées:")
+        print(f"   - Request ID: {request_id}")
+        print(f"   - Text: {len(result['text'])} chars")
+        print(f"   - Audio: {len(audio_base64)} chars")
+        print(f"   - Action: {result.get('action', {}).get('type', 'none')}")
+        print(f"   - Search results: {len(result.get('search_results', []))} items")
         
         publisher.publish(
             topic_path,

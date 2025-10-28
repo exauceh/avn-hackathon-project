@@ -6,12 +6,31 @@ document.addEventListener('DOMContentLoaded', () => {
     const connectionStatus = document.getElementById('connection-status');
     const transcriptBox = document.getElementById('transcript-box');
     const transcriptContent = document.getElementById('transcript-content');
+    const resetSessionBtn = document.getElementById('reset-session');
 
     let currentState = 'idle'; // 'idle', 'recording', 'processing'
 
     // Initialiser le LED comme connecté
     ledStatus.classList.add('connected');
     connectionStatus.textContent = 'Connecté';
+
+    // Bouton réinitialiser la session
+    resetSessionBtn.addEventListener('click', () => {
+        chrome.runtime.sendMessage({ action: 'reset_graph_state' }, (response) => {
+            if (response && response.ok) {
+                // Vider le transcript
+                transcriptContent.innerHTML = '';
+                transcriptBox.classList.add('hidden');
+                statusText.textContent = '✅ Nouvelle session démarrée';
+                statusDisplay.classList.add('success');
+                setTimeout(() => {
+                    statusDisplay.classList.remove('success');
+                    statusText.textContent = 'Prêt à écouter...';
+                }, 2000);
+                console.log('🔄 Session réinitialisée:', response.session_id);
+            }
+        });
+    });
 
     // Messages runtime : mise à jour UI sur recording_state_changed et update_status
     chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {

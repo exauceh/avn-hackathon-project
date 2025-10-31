@@ -83,7 +83,8 @@ class SearchAgent:
                 q=query,
                 cx=CUSTOM_SEARCH_CX,
                 lr='lang_en', # Limit search to French results
-                num=num_results # Number of results
+                num=num_results, # Number of results
+                dateRestrict='7d'
             ).execute()
 
             results = []
@@ -97,7 +98,7 @@ class SearchAgent:
                     "snippet": item.get('snippet', 'No description available')
                 })
                 
-                print(f"  ✅ Result {i+1} (API): {item.get('title', 'No title')[:50]}...")
+                print(f"  ✅ Result {i+1} (API): {item.get('title', 'No title')[:50]}... - {item.get('link', '')}")
 
             return results
 
@@ -155,14 +156,27 @@ class SearchAgent:
             for r in results
         ])
         
-        system_prompt = """You are AVN, a voice assistant for visually impaired people.
-Summarize the search results in a clear and concise manner.
-Structure your response as follows:
-1. Number of results found
-2. Brief summary of each article (title + key point)
-3. Final question: "Would you like me to analyze one of these articles or continue reading?"
+        # Determine if query is a specific question or general search
+        is_specific_question = any(word in query.lower() for word in ['what', 'when', 'where', 'who', 'why', 'how', 'is', 'are', 'does', 'did', '?'])
+        
+        if is_specific_question:
+            system_prompt = """You are AVN, a voice assistant for visually impaired people.
+    The user asked a specific question. Use the search results to provide a direct, concise answer.
+    - Answer the question directly based on the information found
+    - Cite the most relevant source(s)
+    - Keep your answer clear and to the point
+    - If the results don't fully answer the question, say so briefly
 
-Be concise and natural in your expression."""
+    Be natural and conversational in your response."""
+        else:
+            system_prompt = """You are AVN, a voice assistant for visually impaired people.
+    Summarize the search results in a clear and concise manner.
+    Structure your response as follows:
+    1. Number of results found
+    2. Brief summary of each article (title + key point)
+    3. Final question: "Would you like me to analyze one of these articles or continue reading?"
+
+    Be concise and natural in your expression."""
         
         messages = [
             SystemMessage(content=system_prompt),

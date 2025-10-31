@@ -50,8 +50,9 @@ document.addEventListener('DOMContentLoaded', () => {
         if (message.action === 'recording_state_changed') {
             const hot = !!message.hotwordActive;
             const main = !!message.mainListening;
-            console.log('📣 Event runtime recording_state_changed', { hot, main });
-            updateUI({ hotwordActive: hot, mainListening: main });
+            const canInt = !!message.canInterrupt;  // ✅ Nouveau
+            console.log('📣 Event runtime recording_state_changed', { hot, main, canInt });
+            updateUI({ hotwordActive: hot, mainListening: main, canInterrupt: canInt });
             sendResponse({ ok: true });
             return true;
         }
@@ -131,12 +132,21 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function updateUI(state) {
-        // state attendu : { hotwordActive: boolean, mainListening: boolean }
-        const s = state || { hotwordActive: false, mainListening: false };
+        // state attendu : { hotwordActive: boolean, mainListening: boolean, canInterrupt: boolean }
+        const s = state || { hotwordActive: false, mainListening: false, canInterrupt: false };
         clearStateClasses();
 
-        // Priorité : mainListening > hotwordActive > idle
-        if (s.mainListening) {
+        // ✅ Nouvelle priorité : canInterrupt > mainListening > hotwordActive > idle
+        if (s.canInterrupt) {
+            micButton.classList.add('recording');
+            micButton.querySelector('.mic-icon').textContent = '✋';
+            micButton.title = 'Interruption possible - Posez une question';
+            ledStatus.classList.add('recording');
+            connectionStatus.textContent = 'Écoute (interruption)';
+            statusText.textContent = '✋ Posez une question pour interrompre...';
+            statusDisplay.classList.add('listening');
+
+        } else if (s.mainListening) {
             micButton.classList.add('recording');
             micButton.querySelector('.mic-icon').textContent = '🎙️';
             micButton.title = 'Enregistrement en cours';
@@ -173,7 +183,11 @@ document.addEventListener('DOMContentLoaded', () => {
             try {
                 const detail = e && e.detail ? e.detail : {};
                 console.log('📣 Event local recording_state_changed', detail);
-                updateUI({ hotwordActive: !!detail.hotwordActive, mainListening: !!detail.mainListening });
+                updateUI({
+                    hotwordActive: !!detail.hotwordActive,
+                    mainListening: !!detail.mainListening,
+                    canInterrupt: !!detail.canInterrupt  // ✅ Nouveau
+                });
             } catch (err) {
                 console.warn('Erreur handling local recording_state_changed', err);
             }

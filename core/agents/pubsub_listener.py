@@ -1,125 +1,168 @@
 """
-Service PubSub pour intégrer le graphe ADK avec l'API Gateway
+Service Agent pour Cloud Run - Mode Push Subscription
 """
 
 import os
 import json
-import time
 import base64
+from flask import Flask, request, jsonify
 from google.cloud import pubsub_v1
 from google.cloud import texttospeech
 from graph_agent import AVNGraphAgent
 
-# Initialiser l'agent ADK
-print("🤖 Initialisation de l'agent ADK...")
-adk_agent = AVNGraphAgent(use_openai=False)  # Utilise Gemini par défaut
+app = Flask(__name__)
 
-# Configuration Pub/Sub
+# Configuration
 PROJECT_ID = os.getenv("GCP_PROJECT_ID", "avn-hackathon-project")
 OUTPUT_TOPIC = "avn-agent-response"
-SUBSCRIPTION = "avn-input-sub"
 
-# Client TTS
+# Initialiser l'agent ADK
+print("🤖 Initialisation de l'agent ADK...")
+adk_agent = AVNGraphAgent(use_openai=False)
+
+# Clients Google Cloud
 tts_client = texttospeech.TextToSpeechClient()
+publisher = pubsub_v1.PublisherClient()
 
+# Limite de sécurité
+MAX_CHARS_PER_REQUEST = 4500
 
-def text_to_speech(text: str) -> str:
-    """
-    Convertit du texte en audio base64
+def split_text_into_chunks(text: str) -> list[str]:
+    """Divise le texte en morceaux de taille gérable"""
+    chunks = []
+    current_text = text
     
-    Args:
-        text: Texte à convertir
-    
-    Returns:
-        Audio encodé en base64
-    """
-    try:
-        synthesis_input = texttospeech.SynthesisInput(text=text)
+    while len(current_text.encode('utf-8')) > 0:
+        if len(current_text.encode('utf-8')) <= 5000:
+            chunks.append(current_text)
+            break
+
+        safe_segment = current_text[:MAX_CHARS_PER_REQUEST]
+        last_break = safe_segment.rfind('\n\n')
+        if last_break == -1:
+            last_break = safe_segment.rfind('. ')
         
-        voice = texttospeech.VoiceSelectionParams(
-            # 💡 Correction du code de langue pour l'anglais américain
-            language_code="en-US", 
-            name="en-US-Studio-O",       
-            ssml_gender=texttospeech.SsmlVoiceGender.FEMALE
-        )
+        if last_break != -1 and last_break > MAX_CHARS_PER_REQUEST // 2:
+            chunk = current_text[:last_break + 1].strip()
+            current_text = current_text[last_break + 1:].strip()
+        else:
+            chunk = safe_segment.strip()
+            current_text = current_text[MAX_CHARS_PER_REQUEST:].strip()
         
-        audio_config = texttospeech.AudioConfig(
-            audio_encoding=texttospeech.AudioEncoding.MP3,
-            speaking_rate=1.0, # 1.0 est la vitesse normale (ralentissez si besoin)
-            pitch=0.0         # 0.0 est la hauteur normale
-        )
-        
-        response = tts_client.synthesize_speech(
-            input=synthesis_input,
-            voice=voice,
-            audio_config=audio_config
-        )
-        
-        # Encoder en base64
-        audio_base64 = base64.b64encode(response.audio_content).decode('utf-8')
-        return audio_base64
-        
-    except Exception as e:
-        print(f"❌ Erreur TTS: {e}")
+        if chunk:
+            chunks.append(chunk)
+
+    return chunks
+
+def segmented_text_to_speech(text: str) -> str:
+    """Convertit du texte long en audio base64"""
+    if not text:
         return ""
 
+    text_chunks = split_text_into_chunks(text)
+    full_audio_content = b""
 
-def process_message(message: pubsub_v1.subscriber.message.Message):
-    """
-    Traite un message reçu de Pub/Sub
+    voice = texttospeech.VoiceSelectionParams(
+        language_code="en-US",
+        name="en-US-Studio-O",
+        ssml_gender=texttospeech.SsmlVoiceGender.FEMALE
+    )
+
+    audio_config = texttospeech.AudioConfig(
+        audio_encoding=texttospeech.AudioEncoding.MP3,
+        speaking_rate=1.0,
+        pitch=0.0
+    )
+
+    for i, chunk in enumerate(text_chunks):
+        try:
+            print(f"🔊 Synthèse segment {i+1}/{len(text_chunks)}")
+            synthesis_input = texttospeech.SynthesisInput(text=chunk)
+            
+            response = tts_client.synthesize_speech(
+                input=synthesis_input,
+                voice=voice,
+                audio_config=audio_config
+            )
+            
+            full_audio_content += response.audio_content
+
+        except Exception as e:
+            print(f"❌ Erreur TTS segment {i+1}: {e}")
+            if i == 0:
+                return ""
+            break
+            
+    if full_audio_content:
+        return base64.b64encode(full_audio_content).decode('utf-8')
     
-    Args:
-        message: Message Pub/Sub contenant la transcription
+    return ""
+
+@app.route('/')
+def index():
+    return {"status": "Agents Service OK", "project_id": PROJECT_ID}
+
+@app.route('/health', methods=['GET'])
+def health():
+    return jsonify({"status": "healthy"}), 200
+
+@app.route('/process', methods=['POST'])
+def process_message():
+    """
+    Endpoint appelé par Pub/Sub (push subscription)
+    Traite la transcription et publie la réponse
     """
     try:
-        # Décoder le message
-        data = json.loads(message.data.decode('utf-8'))
+        # Vérifier que c'est bien Pub/Sub
+        if not request.headers.get('User-Agent', '').startswith('Google-Cloud-Pub/Sub'):
+            return jsonify({"error": "Unauthorized"}), 401
+        
+        # Décoder le message Pub/Sub
+        envelope = request.get_json()
+        if not envelope:
+            return jsonify({"error": "No Pub/Sub message"}), 400
+        
+        pubsub_message = envelope.get('message', {})
+        data = json.loads(base64.b64decode(pubsub_message['data']).decode('utf-8'))
+        
         request_id = data.get("request_id")
         transcription = data.get("text")
         context = data.get("context", {})
         
         print(f"\n{'='*60}")
-        print(f"📩 Message reçu: {request_id}")
+        print(f"📩 Traitement requête: {request_id}")
         print(f"📝 Transcription: {transcription}")
-        print(f"🌐 Contexte: {context.get('url', 'N/A')}")
+        print(f"🌐 URL: {context.get('url', 'N/A')}")
         
-        # Récupérer le graph_state depuis le contexte
         graph_state = context.get("graph_state", None)
         if graph_state:
-            print(f"📚 État du graphe reçu: {len(graph_state.get('messages', []))} messages en historique")
-            print(f"🔑 Session ID: {graph_state.get('session_id', 'N/A')}")
-            print(f"🔍 Search results dans graph_state: {len(graph_state.get('search_results', []))}")
-            if graph_state.get('search_results'):
-                for i, r in enumerate(graph_state['search_results'][:3], 1):
-                    print(f"   {i}. {r.get('title', 'N/A')[:60]}")
-        else:
-            print("⚠️ Aucun état du graphe fourni")
+            print(f"📚 État graphe: {len(graph_state.get('messages', []))} messages")
+            
+            # Vérifier interruption
+            messages = graph_state.get('messages', [])
+            has_interruption = any(
+                isinstance(msg, dict) and msg.get('content') == 'USER_INTERRUPTED_READING'
+                for msg in messages
+            )
+            
+            if has_interruption:
+                print(f"🛑 INTERRUPTION DÉTECTÉE")
         
-        print("="*60)
-        
-        # Acquitter le message immédiatement
-        message.ack()
-        
-        # Traiter avec l'agent ADK en passant le graph_state
-        start_time = time.time()
+        # Traiter avec l'agent
         result = adk_agent.process_request(
             user_message=transcription,
             context=context,
             session_id=graph_state.get("session_id", request_id) if graph_state else request_id,
             graph_state=graph_state
         )
-        processing_time = time.time() - start_time
         
-        print(f"\n⏱️ Temps de traitement: {processing_time:.2f}s")
-        print(f"🤖 Réponse: {result['text'][:100]}...")
-        print(f"🔍 Search results dans la réponse: {len(result.get('search_results', []))}")
+        print(f"🤖 Réponse générée: {result['text'][:100]}...")
         
         # Générer l'audio
         print("🔊 Génération audio...")
-        audio_base64 = text_to_speech(result['text'])
+        audio_base64 = segmented_text_to_speech(result['text'])
         
         # Publier la réponse
-        publisher = pubsub_v1.PublisherClient()
         topic_path = publisher.topic_path(PROJECT_ID, OUTPUT_TOPIC)
         
         response_data = {
@@ -132,67 +175,31 @@ def process_message(message: pubsub_v1.subscriber.message.Message):
             "context": result.get('context', {})
         }
         
-        print(f"📤 Données publiées:")
-        print(f"   - Request ID: {request_id}")
-        print(f"   - Text: {len(result['text'])} chars")
-        print(f"   - Audio: {len(audio_base64)} chars")
-        print(f"   - Action: {result.get('action', {}).get('type', 'none')}")
-        print(f"   - Search results: {len(result.get('search_results', []))} items")
-        
-        publisher.publish(
+        future = publisher.publish(
             topic_path,
-            json.dumps(response_data).encode('utf-8')
+            json.dumps(response_data).encode('utf-8'),
+            request_id=request_id
         )
         
-        print(f"✅ Réponse publiée pour {request_id}")
+        message_id = future.result(timeout=5.0)
+        print(f"✅ Réponse publiée: message_id={message_id}")
         print("="*60 + "\n")
         
+        # Pub/Sub attend un 200/204
+        return '', 204
+        
     except Exception as e:
-        print(f"❌ Erreur traitement message: {e}")
+        print(f"❌ Erreur traitement: {e}")
         import traceback
         traceback.print_exc()
-        message.ack()  # Acquitter quand même pour éviter les boucles
-
-
-def listen_pubsub():
-    """
-    Écoute les messages Pub/Sub en continu
-    """
-    subscriber = pubsub_v1.SubscriberClient()
-    subscription_path = subscriber.subscription_path(PROJECT_ID, SUBSCRIPTION)
-    
-    print(f"\n{'='*60}")
-    print(f"📡 Écoute de Pub/Sub...")
-    print(f"📍 Subscription: {subscription_path}")
-    print("="*60 + "\n")
-    
-    streaming_pull_future = subscriber.subscribe(
-        subscription_path,
-        callback=process_message
-    )
-    
-    print("✅ Écoute active. Appuyez sur Ctrl+C pour arrêter.\n")
-    
-    try:
-        streaming_pull_future.result()
-    except KeyboardInterrupt:
-        streaming_pull_future.cancel()
-        print("\n🛑 Arrêt de l'écoute Pub/Sub")
-
+        # Retourner 200 pour éviter les retry infinis
+        return '', 200
 
 if __name__ == "__main__":
-    # Charger les variables d'environnement
-    from dotenv import load_dotenv
-    load_dotenv()
+    print("\n" + "="*60)
+    print("🚀 DÉMARRAGE SERVICE AGENTS (GCP Mode)")
+    print(f"📍 Project ID: {PROJECT_ID}")
+    print("="*60 + "\n")
     
-    # Vérifier la configuration
-    if not os.getenv("GOOGLE_API_KEY"):
-        print("❌ GOOGLE_API_KEY non définie dans .env")
-        exit(1)
-    
-    # if not os.getenv("GOOGLE_APPLICATION_CREDENTIALS"):
-    #     print("❌ GOOGLE_APPLICATION_CREDENTIALS non définie")
-    #     exit(1)
-    
-    print("🚀 Démarrage du service Agent ADK")
-    listen_pubsub()
+    port = int(os.environ.get('PORT', 8080))
+    app.run(host='0.0.0.0', port=port, debug=False)

@@ -52,6 +52,7 @@ class FormAgent:
         
         # Get page context
         page_content = state.get("page_content", {})
+        print(page_content)
         
         # Detect forms on page (simulated for demo)
         forms = page_content.get("forms", [])
@@ -78,7 +79,7 @@ class FormAgent:
             return state
         
         # Get user email
-        user_email = state.get("user_email", "user@avn.com")
+        user_email = state.get("user_email", "exaucehs@gmail.com")
         
         # Prepare confirmation
         state["response_text"] = (

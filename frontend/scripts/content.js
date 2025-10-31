@@ -9,16 +9,107 @@ function extractPageContent() {
         forms: extractForms(), // Extraction des formulaires (Cas d'usage #3)
     };
 
-    // Extraction basique des titres et paragraphes visibles
-    document.querySelectorAll('h1, h2, h3, p, button, a').forEach(element => {
-        if (element.textContent.trim().length > 0) {
-            structure.main_sections.push({
-                tag: element.tagName,
-                text: element.textContent.trim().substring(0, 150), // Limiter la taille
-                xpath: getXPath(element) // Pour les actions ciblées (Sprint 2/3)
-            });
+    // ✅ STRATÉGIE 1: Chercher l'élément principal de contenu
+    const mainContentSelectors = [
+        'article',
+        'main',
+        '[role="main"]',
+        '.post-content',
+        '.article-content',
+        '.content',
+        '#content',
+        '.entry-content',
+        '[data-test-id="post-content"]', // Reddit
+        '.Post', // Reddit
+        'div[data-click-id="text"]' // Reddit post body
+    ];
+
+    let mainContainer = null;
+    for (const selector of mainContentSelectors) {
+        mainContainer = document.querySelector(selector);
+        if (mainContainer) {
+            console.log(`📦 Main content found with selector: ${selector}`);
+            break;
         }
+    }
+
+    // ✅ STRATÉGIE 2: Si pas de conteneur principal, chercher dans tout le document
+    // mais avec des filtres stricts
+    const searchRoot = mainContainer || document.body;
+
+    // ✅ Extraction améliorée avec priorité au contenu principal
+    const selectors = [
+        'h1', 'h2', 'h3', 'h4', 'h5', 'h6',  // Titres
+        'p',                                   // Paragraphes
+        'li',                                  // Items de liste
+        'blockquote',                          // Citations
+        'pre',                                 // Code
+    ];
+
+    // ✅ Utiliser un Set pour éviter les doublons
+    const seenTexts = new Set();
+    let totalLength = 0;
+    const maxLength = 50000; // Limite de caractères
+
+    searchRoot.querySelectorAll(selectors.join(', ')).forEach(element => {
+        // ✅ Arrêter si on a déjà beaucoup de contenu
+        if (totalLength >= maxLength) {
+            return;
+        }
+
+        const text = element.textContent.trim();
+
+        // Skip empty, too short, or already seen content
+        if (text.length < 20 || seenTexts.has(text)) {
+            return;
+        }
+
+        // ✅ FILTRES STRICTS: exclure navigation, sidebar, footer, ads, menus
+        const excludeSelectors = [
+            'nav', 'header', 'footer', 'aside',
+            '.menu', '.navigation', '.sidebar', '.ads',
+            '.comments', '.comment', // Exclure les commentaires
+            '.related', '.recommended', // Exclure les suggestions
+            'button', 'form', // Exclure les boutons et formulaires
+            '[role="navigation"]',
+            '[role="complementary"]',
+            '[aria-label*="navigation"]',
+            '[aria-label*="menu"]'
+        ];
+
+        const isInExcludedSection = excludeSelectors.some(sel => element.closest(sel));
+        if (isInExcludedSection) {
+            return;
+        }
+
+        // ✅ Vérifier que l'élément est visible
+        const isVisible = element.offsetParent !== null;
+        if (!isVisible) {
+            return;
+        }
+
+        // ✅ Filtrer les textes qui ressemblent à des éléments UI
+        const uiPatterns = [
+            /^(accéder|connexion|inscription|menu|recherche|partager|commenter|vote|upvote|downvote)/i,
+            /^[0-9]+\s*(points?|commentaires?|votes?)/i,
+            /^(accept|reject|agree|cookies?)/i
+        ];
+
+        if (uiPatterns.some(pattern => pattern.test(text))) {
+            return;
+        }
+
+        seenTexts.add(text);
+        totalLength += text.length;
+
+        structure.main_sections.push({
+            tag: element.tagName,
+            text: text.substring(0, 1000), // ✅ Augmenter la limite
+            xpath: getXPath(element)
+        });
     });
+
+    console.log(`📄 Extracted ${structure.main_sections.length} content sections (${totalLength} chars total)`);
 
     // Pour l'Équipe A : un JSON léger, facile à analyser par le LLM.
     return structure;

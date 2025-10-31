@@ -8,6 +8,11 @@ let waitingForTTS = false; // flag pour indiquer qu'on attend le TTS
 let inactivityCount = 0; // compteur de cycles sans parole
 const MAX_INACTIVITY = 3; // nombre max de cycles sans parole avant de revenir au hotword
 
+// ✅ Variables pour gérer l'interruption pendant TTS
+let isTTSPlaying = false;
+let canInterruptTTS = false;
+let ttsInterruptionRecognition = null;
+
 /* Jouer le son "hum" avec synthèse vocale */
 function playHumSound() {
     try {
@@ -145,9 +150,35 @@ let recognitionTimeout;
 // Écoute les requêtes du background
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
+    // ✅ Message quand le TTS commence (pour activer l'écoute d'interruption)
+    if (message && message.action === 'tts_started') {
+        console.log('🔊 TTS démarré, canInterrupt:', message.canInterrupt);
+        isTTSPlaying = true;
+        canInterruptTTS = message.canInterrupt || false;
+
+        console.log(`🔊 État après réception: isTTSPlaying=${isTTSPlaying}, canInterruptTTS=${canInterruptTTS}`);
+
+        // Lancer/arrêter l'écoute d'interruption en fonction du flag
+        if (canInterruptTTS) {
+            console.log('🎧 TTS interrompable — démarrage écoute d\'interruption');
+            startInterruptionListening();
+        } else {
+            console.log('🔊 TTS non-interrompable — arrêt écoute d\'interruption');
+            // s'assurer qu'aucune écoute d'interruption ne tourne
+            stopInterruptionListening();
+        }
+
+        sendResponse({ ok: true });
+        return true;
+    }
+
     // Message envoyé par le background quand le TTS est terminé
     if (message && message.action === 'tts_finished') {
-        console.log('TTS terminé, reprise de la reconnaissance principale');
+        console.log('✅ TTS terminé, reprise de la reconnaissance principale');
+        isTTSPlaying = false;
+        canInterruptTTS = false;
+        stopInterruptionListening();
+
         waitingForTTS = false;
         inactivityCount = 0; // reset le compteur après une réponse réussie
         // relancer l'écoute principale directement (pas le hotword)
@@ -155,6 +186,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         setTimeout(() => {
             startMainRecognitionLoop();
         }, 800); // délai pour laisser le "hum" se jouer
+        sendResponse({ ok: true });
+        return true;
+    }
+
+    // Nouveau : demande de confirmation après clarification
+    if (message && message.action === 'clarification_prompt') {
+        console.log('📣 Demande de confirmation après clarification reçue');
+        // Lancer une écoute courte pour capter "oui" ou nouvelle question
+        startConfirmationListening();
         sendResponse({ ok: true });
         return true;
     }
@@ -318,3 +358,260 @@ window.getRecordingState = () => ({
     hotwordActive: !!isHotwordActive,
     mainListening: !!isMainListening
 });
+
+
+// ✅ Fonction pour démarrer l'écoute d'interruption pendant le TTS
+function startInterruptionListening() {
+    if (!('webkitSpeechRecognition' in window)) {
+        console.error('Web Speech API non supportée');
+        return;
+    }
+
+    // Arrêter l'écoute précédente si elle existe
+    stopInterruptionListening();
+
+    ttsInterruptionRecognition = new webkitSpeechRecognition();
+    ttsInterruptionRecognition.lang = 'en-US';
+    ttsInterruptionRecognition.continuous = true;
+    ttsInterruptionRecognition.interimResults = false;
+
+    ttsInterruptionRecognition.onstart = () => {
+        console.log('🎤 [Interruption] Écoute active pendant TTS');
+
+        // ✅ Notifier l'UI que l'interruption est possible
+        const stateMsg = {
+            action: 'recording_state_changed',
+            hotwordActive: false,
+            mainListening: false,
+            canInterrupt: true  // ✅ Nouveau flag
+        };
+        chrome.runtime.sendMessage(stateMsg).catch(() => { });
+        try {
+            window.dispatchEvent(new CustomEvent('recording_state_changed', { detail: stateMsg }));
+        } catch (e) { }
+    };
+
+    ttsInterruptionRecognition.onresult = (event) => {
+        if (!isTTSPlaying || !canInterruptTTS) {
+            return;
+        }
+
+        const result = event.results[event.results.length - 1];
+        const transcript = result[0].transcript.trim();
+        console.log('🛑 [Interruption] Détectée:', transcript);
+
+        // Vérifier si c'est une question (heuristique simple)
+        const isQuestion = transcript.toLowerCase().match(/\b(what|who|why|how|when|where|which|qu'est|quoi|comment|pourquoi|c'est quoi)\b/);
+
+        if (isQuestion) {
+            console.log('❓ Question détectée pendant la lecture, interruption...');
+
+            // Arrêter le TTS
+            chrome.runtime.sendMessage({
+                action: 'interrupt_tts',
+                transcript: transcript
+            }).catch(() => { });
+
+            // Arrêter l'écoute d'interruption
+            stopInterruptionListening();
+            isTTSPlaying = false;
+            canInterruptTTS = false;
+        }
+    };
+
+    ttsInterruptionRecognition.onerror = (event) => {
+        console.warn('🎤 [Interruption] Erreur:', event.error);
+
+        if (event.error === 'aborted' || event.error === 'no-speech') {
+            return;
+        }
+
+        // Relancer si toujours en mode TTS
+        if (isTTSPlaying && canInterruptTTS) {
+            setTimeout(() => {
+                if (isTTSPlaying && canInterruptTTS) {
+                    try {
+                        ttsInterruptionRecognition.start();
+                    } catch (e) {
+                        console.warn('Impossible de relancer l\'écoute d\'interruption');
+                    }
+                }
+            }, 1000);
+        }
+    };
+
+    ttsInterruptionRecognition.onend = () => {
+        console.log('🎤 [Interruption] Écoute terminée');
+
+        // Relancer si toujours en mode TTS
+        if (isTTSPlaying && canInterruptTTS) {
+            setTimeout(() => {
+                if (isTTSPlaying && canInterruptTTS) {
+                    try {
+                        ttsInterruptionRecognition.start();
+                    } catch (e) {
+                        console.warn('Impossible de relancer l\'écoute d\'interruption');
+                    }
+                }
+            }, 500);
+        }
+    };
+
+    try {
+        ttsInterruptionRecognition.start();
+    } catch (e) {
+        console.error('🎤 [Interruption] Impossible de démarrer:', e);
+    }
+}
+
+// ✅ Fonction pour arrêter l'écoute d'interruption
+function stopInterruptionListening() {
+    if (ttsInterruptionRecognition) {
+        try {
+            ttsInterruptionRecognition.stop();
+        } catch (e) {
+            console.warn('Erreur arrêt écoute interruption:', e);
+        }
+        ttsInterruptionRecognition = null;
+
+        // ✅ Notifier l'UI que l'interruption n'est plus possible
+        const stateMsg = {
+            action: 'recording_state_changed',
+            hotwordActive: false,
+            mainListening: false,
+            canInterrupt: false
+        };
+        chrome.runtime.sendMessage(stateMsg).catch(() => { });
+        try {
+            window.dispatchEvent(new CustomEvent('recording_state_changed', { detail: stateMsg }));
+        } catch (e) { }
+    }
+}
+
+// Fonction d'écoute dédiée à la confirmation (oui/non ou nouvelle question)
+function startConfirmationListening() {
+    if (!('webkitSpeechRecognition' in window)) {
+        console.error('Web Speech API non supportée pour confirmation');
+        return;
+    }
+
+    console.log('🔎 [Confirmation] Démarrage écoute confirmation...');
+
+    const confRec = new webkitSpeechRecognition();
+    confRec.lang = 'en-US';
+    confRec.continuous = false;
+    confRec.interimResults = false;
+    confRec.maxAlternatives = 1;
+
+    let hasResult = false;
+    let confTimeout = null;
+
+    confRec.onstart = () => {
+        console.log('🔎 [Confirmation] ✅ Écoute en cours pour réponse oui/non ou nouvelle question');
+
+        // Notifier UI
+        const stateMsg = {
+            action: 'recording_state_changed',
+            hotwordActive: false,
+            mainListening: true,  // ✅ Indiquer qu'on écoute
+            canInterrupt: false
+        };
+        chrome.runtime.sendMessage(stateMsg).catch(() => { });
+        try {
+            window.dispatchEvent(new CustomEvent('recording_state_changed', { detail: stateMsg }));
+        } catch (e) { }
+
+        // ✅ Timeout de sécurité (10 secondes)
+        confTimeout = setTimeout(() => {
+            if (!hasResult) {
+                console.warn('🔎 [Confirmation] ⏱️ Timeout - reprise auto de l\'audio');
+                try { confRec.stop(); } catch (e) { }
+                chrome.runtime.sendMessage({ action: 'resume_audio' }).catch(() => { });
+            }
+        }, 10000);
+    };
+
+    confRec.onresult = (event) => {
+        if (confTimeout) {
+            clearTimeout(confTimeout);
+            confTimeout = null;
+        }
+
+        hasResult = true;
+        const transcript = event.results[0][0].transcript.trim();
+        console.log('🔎 [Confirmation] ✅ Résultat reçu:', transcript);
+
+        if (!transcript || transcript.length === 0) {
+            console.warn('🔎 [Confirmation] ⚠️ Transcription vide - reprise audio');
+            chrome.runtime.sendMessage({ action: 'resume_audio' }).catch(() => { });
+            return;
+        }
+
+        const lower = transcript.toLowerCase();
+
+        // Détecter réponse positive (oui)
+        const yesPatterns = /\b(yes|oui|resume|yep|yeah|correct|ok|okay|sure|d'accord|continue|go ahead)\b/i;
+
+        if (lower.match(yesPatterns)) {
+            console.log('🔎 [Confirmation] ✅ Utilisateur satisfait -> reprise audio principal');
+            chrome.runtime.sendMessage({ action: 'resume_audio' }).catch(() => { });
+            chrome.runtime.sendMessage({
+                action: 'update_status',
+                data: '✅ Reprise de la lecture principale...'
+            }).catch(() => { });
+        } else {
+            // Considérer tout autre réponse comme nouvelle question / follow-up
+            console.log('🔎 [Confirmation] ❓ Nouvelle question détectée:', transcript);
+            chrome.runtime.sendMessage({
+                action: 'clarification_followup',
+                transcript: transcript
+            }).catch(() => { });
+            chrome.runtime.sendMessage({
+                action: 'update_status',
+                data: `⏳ Envoi de votre question...`
+            }).catch(() => { });
+        }
+    };
+
+    confRec.onerror = (e) => {
+        if (confTimeout) {
+            clearTimeout(confTimeout);
+            confTimeout = null;
+        }
+
+        console.warn('🔎 [Confirmation] ❌ Erreur reconnaissance:', e.error);
+
+        // Si no-speech ou aborted, reprendre l'audio
+        if (e.error === 'no-speech' || e.error === 'aborted') {
+            console.log('🔎 [Confirmation] Pas de parole détectée - reprise audio');
+            chrome.runtime.sendMessage({ action: 'resume_audio' }).catch(() => { });
+        } else {
+            console.error('🔎 [Confirmation] Erreur fatale - reprise audio');
+            chrome.runtime.sendMessage({ action: 'resume_audio' }).catch(() => { });
+        }
+    };
+
+    confRec.onend = () => {
+        if (confTimeout) {
+            clearTimeout(confTimeout);
+            confTimeout = null;
+        }
+
+        console.log('🔎 [Confirmation] Fin écoute confirmation');
+
+        // Si aucun résultat n'a été reçu, reprendre l'audio par sécurité
+        if (!hasResult) {
+            console.log('🔎 [Confirmation] Aucun résultat - reprise audio par défaut');
+            chrome.runtime.sendMessage({ action: 'resume_audio' }).catch(() => { });
+        }
+    };
+
+    try {
+        confRec.start();
+        console.log('🔎 [Confirmation] Reconnaissance démarrée avec succès');
+    } catch (e) {
+        console.error('🔎 [Confirmation] ❌ Impossible de démarrer la reconnaissance:', e);
+        // fallback: reprendre audio si impossible
+        chrome.runtime.sendMessage({ action: 'resume_audio' }).catch(() => { });
+    }
+}

@@ -17,6 +17,7 @@ from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 from search_agent import SearchAgent
 from navigation_agent import NavigationAgent
 from form_agent import FormAgent
+from reading_agent import ReadingAgent
 
 load_dotenv()
 
@@ -79,6 +80,7 @@ class AVNGraphAgent:
         self.search_agent = SearchAgent(self.llm)
         self.navigation_agent = NavigationAgent(self.llm)
         self.form_agent = FormAgent(self.llm)
+        self.reading_agent = ReadingAgent(self.llm)
         
         # Build the graph
         self.graph = self._build_graph()
@@ -94,6 +96,7 @@ class AVNGraphAgent:
         workflow.add_node("search", self._handle_search)
         workflow.add_node("navigation", self._handle_navigation)
         workflow.add_node("form", self._handle_form)
+        workflow.add_node("reading", self._handle_reading)
         workflow.add_node("response", self._generate_response)
         
         # Define transitions
@@ -107,6 +110,7 @@ class AVNGraphAgent:
                 "search": "search",
                 "navigation": "navigation",
                 "form": "form",
+                "reading": "reading",
                 "response": "response"
             }
         )
@@ -115,6 +119,7 @@ class AVNGraphAgent:
         workflow.add_edge("search", "response")
         workflow.add_edge("navigation", "response")
         workflow.add_edge("form", "response")
+        workflow.add_edge("reading", "response")
         workflow.add_edge("response", END)
         
         # Compile the graph with checkpoints for memory
@@ -126,23 +131,44 @@ class AVNGraphAgent:
         
         last_message = state["messages"][-1].content if state["messages"] else ""
         
+        # ✅ DÉTECTER L'INTERRUPTION depuis un flag dédié (pas dans les messages)
+        # Ce flag est passé dans le graph_state depuis le frontend
+        has_interruption = state.get("was_interrupted", False)
+        
+        if has_interruption:
+            state["next_agent"] = "reading"
+            state["was_interrupted"] = False  # ✅ Nettoyer le flag immédiatement
+            print(f"🎯 Router: INTERRUPTION → reading (clarification)")
+            print(f"🎯 Message utilisateur: {last_message[:50]}...")
+            return state
+        
         # Create a prompt for the router
         system_prompt = """
         You are an intelligent router for a voice assistant.
         Analyze the user's request and determine which action to perform:
 
-        - SEARCH: If the user requests a search (e.g., "search", "find", "look for")
-        - NAVIGATION: If the user wants to navigate or open a link (e.g., "open", "go to", "read the article")
-        - FORM: If the user wants to fill out a form (e.g., "register", "fill", "submit")
-        - RESPONSE: For all other questions or confirmations
+        - SEARCH: If the user requests a search (e.g., "search for", "find information about", "look up") or wants to know about recent/current information.
+        - NAVIGATION: If the user wants to navigate to or open a website/page/article. This includes:
+          * Direct URL navigation (e.g., "open google.com", "go to wikipedia")
+          * Generic site navigation (e.g., "open YouTube", "visit BBC News")
+          * Navigating to search results (e.g., "open the first article", "go to the second result", "read the third link")
+          * Following links from current page (e.g., "click on about us", "go to the next page","scroll down)
+        - FORM: If the user wants to fill out, submit, or interact with a form (e.g., "register", "sign up", "fill the email field", "submit the form")
+        - READING: If the user wants to read content, asks for clarification during reading, or wants to resume (e.g., "read this article", "what is X?", "continue reading", "resume", "explain that", "read more")
+        - RESPONSE: For general questions, confirmations, greetings, or requests that don't fit the above categories
 
-        Respond ONLY with one of these words: SEARCH, NAVIGATION, FORM, or RESPONSE
+        Respond ONLY with one of these words: SEARCH, NAVIGATION, FORM, READING, or RESPONSE
         """
         
-        messages = [
-            SystemMessage(content=system_prompt),
-            HumanMessage(content=f"User request: {last_message}")
-        ]
+        # ✅ Include conversation history for context
+        messages = [SystemMessage(content=system_prompt)]
+        
+        # Add recent conversation history (last 5 messages)
+        history_messages = state["messages"][-6:-1] if len(state["messages"]) > 1 else []
+        messages.extend(history_messages)
+        
+        # Add current request
+        messages.append(HumanMessage(content=f"User request: {last_message}"))
         
         response = self.llm.invoke(messages)
         decision = response.content.strip().upper()
@@ -152,6 +178,7 @@ class AVNGraphAgent:
             "SEARCH": "search",
             "NAVIGATION": "navigation",
             "FORM": "form",
+            "READING": "reading",
             "RESPONSE": "response"
         }
         
@@ -179,6 +206,11 @@ class AVNGraphAgent:
         print("📝 Executing FormAgent...")
         return self.form_agent.process(state)
     
+    def _handle_reading(self, state: AgentState) -> AgentState:
+        """Delegate to ReadingAgent"""
+        print("📖 Executing ReadingAgent...")
+        return self.reading_agent.process(state)
+    
     def _generate_response(self, state: AgentState) -> AgentState:
         """Generate the final response for the user"""
         
@@ -194,10 +226,15 @@ class AVNGraphAgent:
         Respond concisely and clearly. Always mention the actions you have performed.
         """
         
-        messages = [
-            SystemMessage(content=system_prompt),
-            HumanMessage(content=last_message)
-        ]
+        # Include conversation history for context
+        messages = [SystemMessage(content=system_prompt)]
+        
+        # Add recent conversation history (last 10 messages)
+        history_messages = state["messages"][:-1] if len(state["messages"]) > 1 else []
+        messages.extend(history_messages[-10:])
+        
+        # Add current message
+        messages.append(HumanMessage(content=last_message))
         
         response = self.llm.invoke(messages)
         state["response_text"] = response.content
@@ -248,7 +285,8 @@ class AVNGraphAgent:
             "next_agent": "",
             "action": {},
             "response_text": "",
-            "needs_confirmation": False
+            "needs_confirmation": False,
+            "was_interrupted": False  # ✅ NOUVEAU
         }
         
         # ✅ RESTAURER L'HISTORIQUE DEPUIS LE GRAPH_STATE
@@ -260,7 +298,7 @@ class AVNGraphAgent:
                 
                 # Convertir les messages du graph_state en objets LangChain
                 restored_messages = []
-                for msg in previous_messages[-10:]:  # Limiter aux 10 derniers
+                for msg in previous_messages[-10:]:
                     role = msg.get("role", "user")
                     content = msg.get("content", "")
                     
@@ -268,6 +306,9 @@ class AVNGraphAgent:
                         restored_messages.append(HumanMessage(content=content))
                     elif role == "assistant":
                         restored_messages.append(AIMessage(content=content))
+                    elif role == "system":
+                        # ✅ Ajouter le support des messages système
+                        restored_messages.append(SystemMessage(content=content))
                 
                 # Ajouter le nouveau message de l'utilisateur
                 restored_messages.append(HumanMessage(content=user_message))
@@ -291,6 +332,11 @@ class AVNGraphAgent:
             
             if graph_state.get("user_preferences"):
                 initial_state["user_preferences"] = graph_state["user_preferences"]
+        
+        # ✅ Récupérer le flag d'interruption
+        if graph_state.get("was_interrupted"):
+            initial_state["was_interrupted"] = True
+            print(f"🛑 Flag d'interruption récupéré depuis graph_state")
         
         # Execute the graph
         config = {"configurable": {"thread_id": session_id}}

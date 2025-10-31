@@ -30,7 +30,7 @@ class NavigationAgent:
         print(f"🧭 Navigation: {last_message}")
         
         # Detect navigation type
-        if any(word in last_message for word in ["open", "read", "article", "link"]):
+        if any(word in last_message for word in ["open", "read", "article", "link", "go to", "navigate to"]):
             return self._handle_link_navigation(state)
         
         elif any(word in last_message for word in ["back", "previous"]):
@@ -43,9 +43,8 @@ class NavigationAgent:
             return self._handle_scroll(state, direction="up")
         
         else:
-            # Generic navigation
-            state["response_text"] = "I didn't understand the desired navigation action. Could you clarify?"
-            state["action"] = {}
+            # ✅ Generic navigation - Try to extract URL or site name
+            return self._handle_generic_navigation(state)
         
         return state
     
@@ -97,42 +96,48 @@ class NavigationAgent:
             
             # Use LLM to match the best result
             results_text = "\n".join([
-                f"{r['rank']}. {r['title']}"
-                for r in search_results
+            f"{r['rank']}. {r['title']}"
+            for r in search_results
             ])
             
             system_prompt = """You are an assistant that identifies the desired article.
             The user is referring to an article from the list.
             Respond ONLY with the article number (1, 2, or 3).
-            If you're not sure, respond with 1."""
+            If you're not sure, respond with 'UNKNOWN'."""
             
             messages = [
-                SystemMessage(content=system_prompt),
-                HumanMessage(content=f"Articles:\n{results_text}\n\nUser: {last_message}")
+            SystemMessage(content=system_prompt),
+            HumanMessage(content=f"Articles:\n{results_text}\n\nUser: {last_message}")
             ]
             
             response = self.llm.invoke(messages)
             print(f"🤖 LLM a répondu: '{response.content}'")
             
             try:
-                rank = int(response.content.strip())
-                print(f"🎯 Rang LLM: {rank}")
+                llm_response = response.content.strip()
                 
-                if 0 < rank <= len(search_results):
-                    result = search_results[rank - 1]
-                    target_url = result['url']
-                    target_title = result['title']
-                    print(f"✅ Article trouvé via LLM: {target_title[:50]}...")
+                if llm_response.upper() == 'UNKNOWN':
+                    print("⚠️ LLM ne peut pas identifier l'article, passage à la stratégie 3")
+                    # Continue to Strategy 3 (generic navigation)
                 else:
-                    print(f"⚠️ Rang LLM {rank} hors limites")
-            except Exception as e:
+                    rank = int(llm_response)
+                    print(f"🎯 Rang LLM: {rank}")
+                    
+                    if 0 < rank <= len(search_results):
+                        result = search_results[rank - 1]
+                        target_url = result['url']
+                        target_title = result['title']
+                        print(f"✅ Article trouvé via LLM: {target_title[:50]}...")
+                    else:
+                        print(f"⚠️ Rang LLM {rank} hors limites")
+            except (ValueError, Exception) as e:
                 print(f"❌ Erreur parsing LLM: {e}")
-                # Default to the first one
-                if search_results:
-                    result = search_results[0]
-                    target_url = result['url']
-                    target_title = result['title']
-                    print(f"⚠️ Fallback sur le premier article: {target_title[:50]}...")
+            # Continue to Strategy 3 instead of defaulting to first article
+        
+        # Strategy 3: No search results - Try to extract URL or site name
+        if not target_url:
+            print("🌐 Aucun résultat de recherche, tentative d'extraction d'URL...")
+            return self._handle_generic_navigation(state)
         
         # If we found a link, prepare the action
         if target_url:
@@ -158,11 +163,6 @@ class NavigationAgent:
             # Simulate new page context (will be updated by frontend)
             state["current_url"] = target_url
             state["page_title"] = target_title
-            
-        else:
-            print("❌ Aucun article identifié")
-            state["response_text"] = "I couldn't identify which article you want to open. Could you clarify?"
-            state["action"] = {}
         
         return state
     
@@ -228,6 +228,123 @@ class NavigationAgent:
             title_match = True
         
         return url_match or title_match
+    
+    def _handle_generic_navigation(self, state: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Handle generic navigation when no search results are available.
+        Try to extract URL or website name from user message.
+        
+        Args:
+            state: Current graph state
+        
+        Returns:
+            Updated state with navigation action
+        """
+        
+        last_message = state["messages"][-1].content
+        
+        print(f"🌐 Navigation générique: {last_message}")
+        
+        # Strategy 1: Extract explicit URL (http://, https://, www.)
+        url_pattern = r'https?://[^\s]+|www\.[^\s]+'
+        url_match = re.search(url_pattern, last_message, re.IGNORECASE)
+        
+        if url_match:
+            target_url = url_match.group(0)
+            # Add https:// if only www.
+            if target_url.startswith('www.'):
+                target_url = f"https://{target_url}"
+            
+            print(f"✅ URL détectée: {target_url}")
+            
+            state["action"] = {
+                "type": "navigate",
+                "url": target_url,
+                "method": "click"
+            }
+            
+            state["response_text"] = f"Opening {target_url}."
+            state["needs_confirmation"] = False
+            
+            return state
+        
+        # Strategy 2: Extract website name and construct URL
+        # Match patterns like "go to google", "open youtube", "navigate to github"
+        # site_pattern = r'\b(?:go to|open|navigate to|visit)\s+([a-z0-9]+(?:\.[a-z]+)?)\b'
+        # site_match = re.search(site_pattern, last_message.lower())
+        
+        # if site_match:
+        #     site_name = site_match.group(1)
+            
+        #     # Add .com if no extension
+        #     if '.' not in site_name:
+        #         target_url = f"https://www.{site_name}.com"
+        #     else:
+        #         target_url = f"https://{site_name}"
+            
+        #     print(f"✅ Site détecté: {site_name} → {target_url}")
+            
+        #     state["action"] = {
+        #         "type": "navigate",
+        #         "url": target_url,
+        #         "method": "click"
+        #     }
+            
+        #     state["response_text"] = f"Opening {site_name}."
+        #     state["needs_confirmation"] = False
+            
+        #     return state
+        
+        # Strategy 3: Use LLM to extract intent and construct URL
+        system_prompt = """You are a navigation assistant.
+        The user wants to navigate to a website but hasn't provided a full URL.
+        Extract the website name from their message and respond with ONLY the URL in this format: https://www.example.com
+        
+        Examples:
+        - "go to google" → https://www.google.com
+        - "open youtube" → https://www.youtube.com
+        - "navigate to github" → https://www.github.com
+        - "visit bbc news" → https://www.bbc.com/news
+        
+        If you cannot determine the website, respond with: UNKNOWN"""
+        
+        messages = [
+            SystemMessage(content=system_prompt),
+            HumanMessage(content=last_message)
+        ]
+        
+        response = self.llm.invoke(messages)
+        llm_response = response.content.strip()
+        
+        print(f"🤖 LLM a répondu: '{llm_response}'")
+        
+        if llm_response.startswith('http') and llm_response != 'UNKNOWN':
+            target_url = llm_response
+            
+            print(f"✅ URL construite par LLM: {target_url}")
+            
+            state["action"] = {
+                "type": "navigate",
+                "url": target_url,
+                "method": "click"
+            }
+            
+            state["response_text"] = f"Opening {target_url}."
+            state["needs_confirmation"] = False
+            
+            return state
+        
+        # Strategy 4: Fallback - couldn't determine navigation target
+        print("❌ Impossible de déterminer la cible de navigation")
+        
+        state["response_text"] = (
+            "I didn't understand where you want to navigate. "
+            "Please provide a website name or URL. For example: 'go to google' or 'open youtube.com'"
+        )
+        state["action"] = {"type": "info"}
+        state["needs_confirmation"] = False
+        
+        return state
 
 
 # Standalone test
@@ -247,7 +364,7 @@ if __name__ == "__main__":
     
     # Simulate search results
     test_state = {
-        "messages": [HumanMessage(content="Yes, read the first article")],
+        "messages": [HumanMessage(content="navigate to the french governement site")],
         "search_results": [
             {
                 "rank": 1,

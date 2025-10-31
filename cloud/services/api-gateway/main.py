@@ -1,19 +1,30 @@
+import base64
 import os
 import uuid
 import json
 import time
-import threading
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-from pubsub_handler import setup_pubsub_listener, publish_text
+from google.cloud import pubsub_v1
 import storage
 
 app = Flask(__name__)
 CORS(app)
 
+# Configuration
+PROJECT_ID = os.getenv("GCP_PROJECT_ID", "avn-hackathon-project")
+USER_TRANSCRIPTION_TOPIC = "frontend_input"
+
+# Client Pub/Sub
+publisher = pubsub_v1.PublisherClient()
+
 @app.route('/')
 def index():
-    return {"status": "Voice Gateway OK", "pending": len(storage.pending_responses)}
+    return {
+        "status": "API Gateway OK",
+        "pending": len(storage.pending_responses),
+        "project_id": PROJECT_ID
+    }
 
 @app.route('/process', methods=['POST'])
 def process_text():
@@ -34,24 +45,20 @@ def process_text():
         print(f"\n{'='*60}")
         print(f"📝 Traitement {request_id}: {transcription}")
         print(f"🌐 Contexte URL: {context.get('url', 'N/A')}")
-        print(f"📄 Titre: {context.get('title', 'N/A')}")
         
-        # Récupérer le graph_state depuis le contexte
         graph_state = context.get('graph_state', None)
         if graph_state:
             session_id = graph_state.get('session_id', request_id)
-            print(f"📚 État du graphe reçu: {len(graph_state.get('messages', []))} messages")
+            print(f"📚 État du graphe: {len(graph_state.get('messages', []))} messages")
             print(f"🔑 Session ID: {session_id}")
             
-            # Stocker l'état du graphe côté serveur (backup optionnel)
             with storage.graph_states_lock:
                 storage.graph_states[session_id] = {
                     "state": graph_state,
                     "timestamp": time.time()
                 }
-        else:
-            print("⚠️ Aucun état du graphe fourni")
         
+        # Stocker la requête en attente
         with storage.pending_lock:
             storage.pending_responses[request_id] = {
                 "status": "waiting",
@@ -59,10 +66,23 @@ def process_text():
                 "context": context,
                 "timestamp": time.time()
             }
-            print(f"📊 Requêtes en attente: {list(storage.pending_responses.keys())}")
         
-        publish_text(request_id, transcription, context)
+        # Publier sur Pub/Sub
+        topic_path = publisher.topic_path(PROJECT_ID, USER_TRANSCRIPTION_TOPIC)
+        message_data = json.dumps({
+            "request_id": request_id,
+            "text": transcription,
+            "context": context
+        }).encode('utf-8')
         
+        future = publisher.publish(
+            topic_path,
+            message_data,
+            request_id=request_id  # Attribut pour le routing
+        )
+        
+        message_id = future.result(timeout=5.0)
+        print(f"✅ Publié sur Pub/Sub: message_id={message_id}")
         print("="*60 + "\n")
         
         return jsonify({
@@ -72,6 +92,62 @@ def process_text():
     
     except Exception as e:
         print(f"❌ Erreur traitement: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/agent-response', methods=['POST'])
+def receive_agent_response():
+    """
+    Endpoint appelé par Pub/Sub (push subscription) avec la réponse de l'agent
+    """
+    try:
+        # Vérifier que c'est bien Pub/Sub qui appelle
+        if not request.headers.get('User-Agent', '').startswith('Google-Cloud-Pub/Sub'):
+            return jsonify({"error": "Unauthorized"}), 401
+        
+        # Décoder le message Pub/Sub
+        envelope = request.get_json()
+        if not envelope:
+            return jsonify({"error": "No Pub/Sub message"}), 400
+        
+        pubsub_message = envelope.get('message', {})
+        data = json.loads(base64.b64decode(pubsub_message['data']).decode('utf-8'))
+        
+        request_id = data.get('request_id')
+        response_text = data.get('text', '')
+        audio_base64 = data.get('audio', '')
+        action = data.get('action', {})
+        needs_confirmation = data.get('needs_confirmation', False)
+        search_results = data.get('search_results', [])
+        
+        print(f"\n{'='*60}")
+        print(f"📨 Réponse agent reçue: {request_id}")
+        print(f"📝 Texte: {response_text[:100]}...")
+        print(f"🔊 Audio: {len(audio_base64)} chars")
+        
+        # Stocker la réponse
+        with storage.pending_lock:
+            if request_id in storage.pending_responses:
+                storage.pending_responses[request_id].update({
+                    "status": "ready",
+                    "text": response_text,
+                    "audio": audio_base64,
+                    "action": action,
+                    "needs_confirmation": needs_confirmation,
+                    "search_results": search_results
+                })
+                print(f"✅ Réponse stockée pour {request_id}")
+            else:
+                print(f"⚠️ Request ID {request_id} non trouvé dans pending")
+        
+        print("="*60 + "\n")
+        
+        # Pub/Sub attend un 200/204
+        return '', 204
+    
+    except Exception as e:
+        print(f"❌ Erreur réception réponse: {e}")
         import traceback
         traceback.print_exc()
         return jsonify({"error": str(e)}), 500
@@ -94,13 +170,6 @@ def get_audio_response(request_id):
     
     # Si réponse prête
     if response["status"] == "ready":
-        print(f"\n{'='*60}")
-        print(f"📤 Envoi réponse pour {request_id}")
-        print(f"📝 Texte: {response.get('text', '')[:50]}...")
-        print(f"🔊 Audio: {len(response.get('audio', ''))} caractères")
-        print(f"🎬 Action: {response.get('action', {})}")
-        print("="*60 + "\n")
-        
         result = {
             "transcription": response["transcription"],
             "text": response.get("text"),
@@ -129,7 +198,6 @@ def get_graph_state(session_id):
     if not state_data:
         return jsonify({"error": "Session not found"}), 404
     
-    # Vérifier timeout
     if time.time() - state_data["timestamp"] > storage.GRAPH_STATE_TIMEOUT:
         with storage.graph_states_lock:
             if session_id in storage.graph_states:
@@ -149,47 +217,16 @@ def delete_graph_state(session_id):
     
     return jsonify({"error": "Session not found"}), 404
 
-def cleanup_old_responses():
-    """Nettoie les réponses et états de graphe expirés"""
-    while True:
-        time.sleep(10)
-        now = time.time()
-        
-        # Nettoyer les réponses expirées
-        with storage.pending_lock:
-            expired = [
-                req_id for req_id, resp in storage.pending_responses.items()
-                if now - resp["timestamp"] > storage.RESPONSE_TIMEOUT
-            ]
-            for req_id in expired:
-                age = now - storage.pending_responses[req_id]['timestamp']
-                print(f"🗑️ Nettoyage requête expirée: {req_id} (age: {age:.1f}s)")
-                del storage.pending_responses[req_id]
-        
-        # Nettoyer les états de graphe expirés
-        with storage.graph_states_lock:
-            expired_states = [
-                session_id for session_id, state_data in storage.graph_states.items()
-                if now - state_data["timestamp"] > storage.GRAPH_STATE_TIMEOUT
-            ]
-            for session_id in expired_states:
-                age = now - storage.graph_states[session_id]['timestamp']
-                print(f"🗑️ Nettoyage état graphe expiré: {session_id} (age: {age:.1f}s)")
-                del storage.graph_states[session_id]
+# Health check pour Cloud Run
+@app.route('/health', methods=['GET'])
+def health():
+    return jsonify({"status": "healthy"}), 200
 
 if __name__ == '__main__':
     print("\n" + "="*60)
-    print("🚀 DÉMARRAGE API GATEWAY")
-    print("="*60)
-    
-    print("📡 Démarrage du listener Pub/Sub...")
-    pubsub_thread = threading.Thread(target=setup_pubsub_listener, daemon=True)
-    pubsub_thread.start()
-    
-    cleanup_thread = threading.Thread(target=cleanup_old_responses, daemon=True)
-    cleanup_thread.start()
-    
-    print("🌐 Serveur Flask sur http://0.0.0.0:8080")
+    print("🚀 DÉMARRAGE API GATEWAY (GCP Mode)")
+    print(f"📍 Project ID: {PROJECT_ID}")
     print("="*60 + "\n")
     
-    app.run(host='0.0.0.0', port=8080, debug=False)
+    port = int(os.environ.get('PORT', 8080))
+    app.run(host='0.0.0.0', port=port, debug=False)

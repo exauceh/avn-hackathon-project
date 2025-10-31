@@ -2,9 +2,10 @@ import os
 import json
 from google.cloud import pubsub_v1
 import storage
+import datetime
 
 PROJECT_ID = 'avn-hackathon-project'
-USER_TRANSCRIPTION_TOPIC = 'voice.input'
+USER_TRANSCRIPTION_TOPIC = 'frontend_input'
 AGENT_REPLY_SUBSCRIPTION = 'agent-reply-sub'
 
 publisher = pubsub_v1.PublisherClient()
@@ -12,22 +13,33 @@ subscriber = pubsub_v1.SubscriberClient()
 
 def publish_text(request_id, transcription, context=None):
     """Publie la transcription avec le request_id et le contexte"""
-    topic_path = publisher.topic_path(PROJECT_ID, USER_TRANSCRIPTION_TOPIC)
+    print("1")
+
+    try:
+        topic_path = publisher.topic_path(PROJECT_ID, USER_TRANSCRIPTION_TOPIC)
+        
+        message_data = json.dumps({
+            "request_id": request_id,
+            "session_id": request_id,
+            "text": transcription,
+            "context": context or {},
+            "timestamp": datetime.datetime.now().isoformat()
+        }).encode('utf-8')
+        
+        future = publisher.publish(
+            topic_path,
+            message_data,
+            session_id=request_id
+        )
+
+        # 2. Attendre le résultat et capturer l'ID
+        message_id = future.result()
+        print(f"✅ Publié avec succès sur Pub/Sub: Message ID={message_id}, Request ID={request_id}")
+        return message_id
+    except Exception as e:
+        # 3. 🚨 Si le message n'est pas publié, l'erreur est ici !
+        print(f"❌ Échec de la publication pour Request ID {request_id}: {e}")
     
-    message_data = json.dumps({
-        "request_id": request_id,
-        "session_id": request_id,
-        "text": transcription,
-        "context": context or {},
-        "timestamp": __import__('datetime').datetime.now().isoformat()
-    }).encode('utf-8')
-    
-    future = publisher.publish(
-        topic_path,
-        message_data,
-        session_id=request_id
-    )
-    message_id = future.result()
     print(f"📤 Publié sur Pub/Sub: {request_id}")
     return message_id
 

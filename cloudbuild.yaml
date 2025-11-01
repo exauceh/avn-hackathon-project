@@ -25,10 +25,12 @@ steps:
   - name: 'gcr.io/cloud-builders/docker'
     args: ['push', 'gcr.io/$PROJECT_ID/api-gateway:$SHORT_SHA']
     waitFor: ['build-api-gateway']
+    id: 'push-api-gateway'
 
   - name: 'gcr.io/cloud-builders/docker'
     args: ['push', 'gcr.io/$PROJECT_ID/agents:$SHORT_SHA']
     waitFor: ['build-agents']
+    id: 'push-agents' 
 
   # Deploy API Gateway
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
@@ -67,7 +69,8 @@ steps:
       - '--memory=4Gi'
       - '--timeout=600'
       - '--cpu=2'
-    waitFor: ['build-agents']
+    waitFor: ['push-agents']
+    id: 'push-agents'
 
 images:
   - 'gcr.io/$PROJECT_ID/api-gateway:$SHORT_SHA'

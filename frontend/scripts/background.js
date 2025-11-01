@@ -1,4 +1,11 @@
-const API_URL = 'http://127.0.0.1:8080';
+// ✅ Importer la configuration (doit être en première ligne)
+importScripts('config.js');
+
+// Maintenant API_URL est disponible
+console.log(`🚀 Service Worker démarré avec API: ${API_URL}`);
+
+console.log(self.location.href);
+
 let currentRequestId = null;
 let pollInterval = null;
 let currentPageContext = {}; // Contexte de la page courante

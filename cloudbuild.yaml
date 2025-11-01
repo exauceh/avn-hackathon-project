@@ -49,7 +49,7 @@ steps:
       - '--max-instances=5'
       - '--memory=2Gi'
       - '--timeout=300'
-    waitFor: ['build-api-gateway']
+    waitFor: ['push-api-gateway']
 
   # Deploy Agents
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
@@ -70,7 +70,6 @@ steps:
       - '--timeout=600'
       - '--cpu=2'
     waitFor: ['push-agents']
-    id: 'push-agents'
 
 images:
   - 'gcr.io/$PROJECT_ID/api-gateway:$SHORT_SHA'

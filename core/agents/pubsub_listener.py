@@ -113,10 +113,6 @@ def process_message():
     Traite la transcription et publie la réponse
     """
     try:
-        # Vérifier que c'est bien Pub/Sub
-        if not request.headers.get('User-Agent', '').startswith('Google-Cloud-Pub/Sub'):
-            return jsonify({"error": "Unauthorized"}), 401
-        
         # Décoder le message Pub/Sub
         envelope = request.get_json()
         if not envelope:

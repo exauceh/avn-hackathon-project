@@ -145,14 +145,6 @@ def receive_agent_response():
         logger.info(f"{'='*60}")
         logger.info("📨 Réception réponse agent")
         
-        # Vérifier User-Agent
-        user_agent = request.headers.get('User-Agent', '')
-        logger.info(f"🔍 User-Agent: {user_agent}")
-        
-        if not user_agent.startswith('Google-Cloud-Pub/Sub'):
-            logger.warning("⚠️ User-Agent non Pub/Sub")
-            return jsonify({"error": "Unauthorized"}), 401
-        
         envelope = request.get_json()
         if not envelope:
             logger.error("❌ Pas d'enveloppe Pub/Sub")

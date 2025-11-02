@@ -131,13 +131,13 @@ class AVNGraphAgent:
         
         last_message = state["messages"][-1].content if state["messages"] else ""
         
-        # ✅ DÉTECTER L'INTERRUPTION depuis un flag dédié (pas dans les messages)
+        #   DÉTECTER L'INTERRUPTION depuis un flag dédié (pas dans les messages)
         # Ce flag est passé dans le graph_state depuis le frontend
         has_interruption = state.get("was_interrupted", False)
         
         if has_interruption:
             state["next_agent"] = "reading"
-            state["was_interrupted"] = False  # ✅ Nettoyer le flag immédiatement
+            state["was_interrupted"] = False  #   Nettoyer le flag immédiatement
             print(f"🎯 Router: INTERRUPTION → reading (clarification)")
             print(f"🎯 Message utilisateur: {last_message[:50]}...")
             return state
@@ -160,7 +160,7 @@ class AVNGraphAgent:
         Respond ONLY with one of these words: SEARCH, NAVIGATION, FORM, READING, or RESPONSE
         """
         
-        # ✅ Include conversation history for context
+        # Include conversation history for context
         messages = [SystemMessage(content=system_prompt)]
         
         # Add recent conversation history (last 5 messages)
@@ -286,10 +286,10 @@ class AVNGraphAgent:
             "action": {},
             "response_text": "",
             "needs_confirmation": False,
-            "was_interrupted": False  # ✅ NOUVEAU
+            "was_interrupted": False  #   NOUVEAU
         }
         
-        # ✅ RESTAURER L'HISTORIQUE DEPUIS LE GRAPH_STATE
+        #   RESTAURER L'HISTORIQUE DEPUIS LE GRAPH_STATE
         if graph_state:
             # Restaurer les derniers messages (limiter à 10 pour éviter un contexte trop grand)
             previous_messages = graph_state.get("messages", [])
@@ -307,14 +307,14 @@ class AVNGraphAgent:
                     elif role == "assistant":
                         restored_messages.append(AIMessage(content=content))
                     elif role == "system":
-                        # ✅ Ajouter le support des messages système
+                        #   Ajouter le support des messages système
                         restored_messages.append(SystemMessage(content=content))
                 
                 # Ajouter le nouveau message de l'utilisateur
                 restored_messages.append(HumanMessage(content=user_message))
                 initial_state["messages"] = restored_messages
             
-            # ✅ RESTAURER LES RÉSULTATS DE RECHERCHE
+            #   RESTAURER LES RÉSULTATS DE RECHERCHE
             search_results_from_state = graph_state.get("search_results", [])
             if search_results_from_state:
                 initial_state["search_results"] = search_results_from_state
@@ -326,14 +326,14 @@ class AVNGraphAgent:
             else:
                 print(f"⚠️ Aucun search_results dans graph_state")
             
-            # ✅ RESTAURER L'EMAIL ET LES PRÉFÉRENCES
+            #   RESTAURER L'EMAIL ET LES PRÉFÉRENCES
             if graph_state.get("user_email"):
                 initial_state["user_email"] = graph_state["user_email"]
             
             if graph_state.get("user_preferences"):
                 initial_state["user_preferences"] = graph_state["user_preferences"]
         
-        # ✅ Récupérer le flag d'interruption
+        #   Récupérer le flag d'interruption
         if graph_state.get("was_interrupted"):
             initial_state["was_interrupted"] = True
             print(f"🛑 Flag d'interruption récupéré depuis graph_state")

@@ -218,7 +218,7 @@ function startMainRecognitionLoop() {
     // Vérifier l'inactivité
     if (inactivityCount >= MAX_INACTIVITY) {
         console.log('Trop d\'inactivité, retour au hotword');
-        speakMessage('I\'m going back to sleep. Say hello AVN to wake me up.');
+        speakMessage('I\'m going back to sleep. Say hello to wake me up.');
         inactivityCount = 0;
         hotwordUsed = false; // réinitialiser pour relancer le hotword
         setTimeout(() => {

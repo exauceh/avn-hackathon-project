@@ -161,7 +161,7 @@ document.addEventListener('DOMContentLoaded', () => {
             micButton.title = 'En attente du mot-clé';
             ledStatus.classList.add('recording');
             connectionStatus.textContent = 'Écoute hotword';
-            statusText.textContent = '👂 Dites "Hello AVN"...';
+            statusText.textContent = '👂 Dites "Hello "...';
             statusDisplay.classList.add('listening');
 
         } else {

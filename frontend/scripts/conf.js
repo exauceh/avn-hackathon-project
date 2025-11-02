@@ -10,5 +10,5 @@ const ENVIRONMENT = 'PRODUCTION';
 // URL active basée sur l'environnement
 const API_URL = API_CONFIG[ENVIRONMENT];
 
-console.log(`🌐 Environnement: ${ENVIRONMENT}`);
-console.log(`📍 API URL: ${API_URL}`);
+console.log(`Environnement: ${ENVIRONMENT}`);
+console.log(`API URL: ${API_URL}`);

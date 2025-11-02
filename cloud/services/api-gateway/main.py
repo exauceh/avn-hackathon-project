@@ -10,7 +10,7 @@ from flask_cors import CORS
 from google.cloud import pubsub_v1
 import storage
 
-# ✅ Configuration du logging
+#    Configuration du logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s [%(levelname)s] %(message)s',
@@ -32,7 +32,7 @@ logger.info(f"🔧 Configuration: PROJECT_ID={PROJECT_ID}, TOPIC={USER_TRANSCRIP
 # Client Pub/Sub
 try:
     publisher = pubsub_v1.PublisherClient()
-    logger.info("✅ Client Pub/Sub initialisé")
+    logger.info("   Client Pub/Sub initialisé")
 except Exception as e:
     logger.error(f"❌ Erreur init Pub/Sub: {e}")
     raise
@@ -94,7 +94,7 @@ def process_text():
                 "context": context,
                 "timestamp": time.time()
             }
-        logger.info("✅ Requête stockée")
+        logger.info("   Requête stockée")
         
         # Publier sur Pub/Sub
         logger.info("📤 Début publication Pub/Sub...")
@@ -119,7 +119,7 @@ def process_text():
         logger.info("⏳ Attente de la confirmation...")
         message_id = future.result(timeout=10.0)
         
-        logger.info(f"✅ MESSAGE PUBLIÉ ! message_id={message_id}")
+        logger.info(f"   MESSAGE PUBLIÉ ! message_id={message_id}")
         logger.info(f"{'='*60}")
         
         return jsonify({
@@ -168,7 +168,7 @@ def receive_agent_response():
                     "needs_confirmation": data.get('needs_confirmation', False),
                     "search_results": data.get('search_results', [])
                 })
-                logger.info(f"✅ Réponse stockée pour {request_id}")
+                logger.info(f"   Réponse stockée pour {request_id}")
             else:
                 logger.warning(f"⚠️ Request ID {request_id} non trouvé")
         
@@ -209,7 +209,7 @@ def get_audio_response(request_id):
             if request_id in storage.pending_responses:
                 del storage.pending_responses[request_id]
         
-        logger.info(f"✅ Réponse envoyée pour {request_id}")
+        logger.info(f"   Réponse envoyée pour {request_id}")
         return jsonify(result)
     
     # Toujours en attente (pas de log pour éviter le spam)

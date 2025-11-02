@@ -1,5 +1,5 @@
 // ✅ Importer la configuration (doit être en première ligne)
-importScripts('config.js');
+importScripts('conf.js');
 
 // Maintenant API_URL est disponible
 console.log(`🚀 Service Worker démarré avec API: ${API_URL}`);

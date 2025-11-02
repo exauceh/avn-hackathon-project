@@ -50,8 +50,7 @@ coverage.xml
 .hypothesis/
 .pytest_cache/
 cover/
-package-lock.json
-cloud/keys
+
 # Translations
 *.mo
 *.pot
@@ -67,9 +66,7 @@ ENV/
 env.bak/
 venv.bak/
 
-google-cloud-sdk/
-cloud/keys
-node_modules
-core/agents/venv
-core/agents/.env
-jsconfig.json
+# Configuration files with API keys
+voice/config.js
+**/config.js
+

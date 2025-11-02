@@ -1,0 +1,45 @@
+{
+  "manifest_version": 3,
+  "name": "AVN Agent",
+  "version": "1.0",
+  "description": "Assistant vocal intelligent avec AVN",
+  "permissions": [
+    "activeTab",
+    "tabs",
+    "storage",
+    "offscreen",
+    "scripting"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "scripts/background.js"
+  },
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_title": "AVN Agent"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "scripts/content.js"
+      ],
+      "run_at": "document_idle"
+
+      
+    }
+  ],
+  "commands": {
+    "toggle-listen": {
+      "suggested_key": {
+        "default": "Ctrl+Space",
+        "mac": "Command+Space"
+      },
+      "description": "Activer l'extension AVN"
+    }
+  }
+}

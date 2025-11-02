@@ -1,0 +1,518 @@
+/* === 🎨 Variables de couleurs === */
+:root {
+  --primary: #6366f1;
+  --primary-hover: #4f46e5;
+  --secondary: #8b5cf6;
+  --accent: #f59e0b;
+  --danger: #ef4444;
+  --success: #10b981;
+  --bg-gradient-start: #667eea;
+  --bg-gradient-end: #764ba2;
+  --bg-main: #ffffff;
+  --bg-card: #f8fafc;
+  --text-primary: #1e293b;
+  --text-secondary: #64748b;
+  --text-muted: #94a3b8;
+  --border: #e2e8f0;
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+  --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+}
+
+/* === 🌐 Reset & Base === */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html,
+body {
+  width: 420px;
+  /* ✅ Largeur FIXE au lieu de 100% */
+  height: 580px;
+  /* ✅ Hauteur FIXE */
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
+  background: linear-gradient(135deg, var(--bg-gradient-start) 0%, var(--bg-gradient-end) 100%);
+  color: var(--text-primary);
+  padding: 0;
+  margin: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  /* ✅ Permettre le scroll vertical si nécessaire */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* === 📦 Container === */
+#container {
+  background: var(--bg-main);
+  border-radius: 20px;
+  padding: 32px 28px;
+  /* ✅ Augmenté le padding */
+  margin: 16px;
+  /* ✅ Augmenté la marge */
+  box-shadow: var(--shadow-xl);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
+  /* ✅ Augmenté l'espacement */
+}
+
+/* === 🎯 Header === */
+.header {
+  text-align: center;
+  width: 100%;
+}
+
+.logo {
+  font-size: 56px;
+  /* ✅ Logo plus grand */
+  margin-bottom: 16px;
+  /* ✅ Plus d'espace */
+  animation: float 3s ease-in-out infinite;
+}
+
+@keyframes float {
+
+  0%,
+  100% {
+    transform: translateY(0px);
+  }
+
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+h1 {
+  font-size: 32px;
+  /* ✅ Plus grand */
+  font-weight: 700;
+  background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  margin: 0;
+  letter-spacing: -0.5px;
+}
+
+.subtitle {
+  font-size: 14px;
+  /* ✅ Plus lisible */
+  color: var(--text-muted);
+  margin-top: 6px;
+  font-weight: 500;
+}
+
+/* === 💡 Status Indicator === */
+.status-indicator {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  /* ✅ Plus d'espace */
+  padding: 10px 20px;
+  /* ✅ Plus de padding */
+  background: var(--bg-card);
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  font-size: 14px;
+  /* ✅ Plus lisible */
+  font-weight: 500;
+  color: var(--text-secondary);
+  transition: all 0.3s ease;
+}
+
+.reset-btn {
+  margin-left: auto;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-size: 18px;
+  padding: 4px 8px;
+  border-radius: 8px;
+  transition: all 0.3s ease;
+  opacity: 0.6;
+}
+
+.reset-btn:hover {
+  opacity: 1;
+  background: rgba(99, 102, 241, 0.1);
+  transform: rotate(180deg);
+}
+
+.reset-btn:active {
+  transform: rotate(180deg) scale(0.9);
+}
+
+.led {
+  display: inline-block;
+  width: 10px;
+  /* ✅ LED plus grande */
+  height: 10px;
+  border-radius: 50%;
+  background-color: var(--text-muted);
+  transition: all 0.3s ease;
+}
+
+.led.connected {
+  background-color: var(--success);
+  box-shadow: 0 0 10px var(--success), 0 0 20px rgba(16, 185, 129, 0.3);
+}
+
+.led.recording {
+  background-color: var(--danger);
+  box-shadow: 0 0 10px var(--danger);
+  animation: blink 1s ease-in-out infinite;
+}
+
+.led.processing {
+  background-color: var(--accent);
+  box-shadow: 0 0 10px var(--accent);
+  animation: blink 1s ease-in-out infinite;
+}
+
+@keyframes blink {
+
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.3;
+  }
+}
+
+/* === 🎙️ Bouton Microphone === */
+#mic-button {
+  position: relative;
+  width: 120px;
+  /* ✅ Plus grand */
+  height: 120px;
+  border-radius: 50%;
+  border: none;
+  cursor: pointer;
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: var(--shadow-lg);
+  background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: visible;
+}
+
+.mic-icon {
+  font-size: 52px;
+  /* ✅ Icône plus grande */
+  z-index: 2;
+  transition: transform 0.3s ease;
+}
+
+#mic-button:hover .mic-icon {
+  transform: scale(1.1);
+}
+
+#mic-button:active {
+  transform: scale(0.95);
+}
+
+/* Waves Animation */
+.mic-waves {
+  position: absolute;
+  inset: 0;
+  display: none;
+}
+
+.mic-waves span {
+  position: absolute;
+  inset: -10px;
+  border: 2px solid var(--danger);
+  border-radius: 50%;
+  animation: wave 1.5s ease-out infinite;
+  opacity: 0;
+}
+
+.mic-waves span:nth-child(2) {
+  animation-delay: 0.5s;
+}
+
+.mic-waves span:nth-child(3) {
+  animation-delay: 1s;
+}
+
+@keyframes wave {
+  0% {
+    transform: scale(1);
+    opacity: 0.8;
+  }
+
+  100% {
+    transform: scale(1.5);
+    opacity: 0;
+  }
+}
+
+/* États du bouton */
+#mic-button.idle {
+  background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+}
+
+#mic-button.idle:hover {
+  box-shadow: var(--shadow-xl);
+  transform: translateY(-2px);
+}
+
+#mic-button.recording {
+  background: linear-gradient(135deg, var(--danger) 0%, #dc2626 100%);
+  animation: pulse-btn 1.5s ease-in-out infinite;
+}
+
+#mic-button.recording .mic-waves {
+  display: block;
+}
+
+@keyframes pulse-btn {
+
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7), var(--shadow-lg);
+  }
+
+  50% {
+    box-shadow: 0 0 0 20px rgba(239, 68, 68, 0), var(--shadow-lg);
+  }
+}
+
+#mic-button.processing {
+  background: linear-gradient(135deg, var(--accent) 0%, #d97706 100%);
+}
+
+#mic-button.processing .mic-icon {
+  animation: rotate 1s linear infinite;
+}
+
+@keyframes rotate {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* === 📊 Status Card === */
+.status-card {
+  width: 100%;
+  padding: 20px;
+  /* ✅ Plus de padding */
+  background: var(--bg-card);
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  min-height: 80px;
+  /* ✅ Plus haut */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s ease;
+}
+
+.status-text {
+  font-size: 15px;
+  /* ✅ Plus lisible */
+  color: var(--text-secondary);
+  text-align: center;
+  line-height: 1.6;
+  margin: 0;
+  font-weight: 500;
+}
+
+/* États du status */
+.status-card.success {
+  background: rgba(16, 185, 129, 0.08);
+  border-color: var(--success);
+}
+
+.status-card.success .status-text {
+  color: var(--success);
+  font-weight: 600;
+}
+
+.status-card.error {
+  background: rgba(239, 68, 68, 0.08);
+  border-color: var(--danger);
+}
+
+.status-card.error .status-text {
+  color: var(--danger);
+  font-weight: 600;
+}
+
+.status-card.processing {
+  background: rgba(245, 158, 11, 0.08);
+  border-color: var(--accent);
+}
+
+.status-card.processing .status-text {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.status-card.interim .status-text {
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+/* === 💬 Transcript Box === */
+.transcript-box {
+  width: 100%;
+  background: var(--bg-card);
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  overflow: hidden;
+  transition: all 0.3s ease;
+  max-height: 220px;
+  /* ✅ Plus haut */
+}
+
+.transcript-box.hidden {
+  display: none;
+}
+
+.transcript-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  /* ✅ Plus d'espace */
+  padding: 14px 18px;
+  /* ✅ Plus de padding */
+  background: white;
+  border-bottom: 1px solid var(--border);
+  font-weight: 600;
+  font-size: 14px;
+  /* ✅ Plus lisible */
+  color: var(--text-primary);
+}
+
+.transcript-icon {
+  font-size: 18px;
+  /* ✅ Plus grand */
+}
+
+.transcript-content {
+  padding: 18px;
+  /* ✅ Plus de padding */
+  max-height: 170px;
+  /* ✅ Plus haut */
+  overflow-y: auto;
+  font-size: 14px;
+  /* ✅ Plus lisible */
+  line-height: 1.7;
+  color: var(--text-primary);
+}
+
+.transcript-item {
+  margin-bottom: 14px;
+  /* ✅ Plus d'espace */
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.transcript-item:last-child {
+  margin-bottom: 0;
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+.transcript-label {
+  font-weight: 600;
+  font-size: 12px;
+  /* ✅ Plus lisible */
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+  /* ✅ Plus d'espace */
+}
+
+.transcript-text {
+  color: var(--text-primary);
+  font-size: 14px;
+  /* ✅ Assuré d'être lisible */
+}
+
+/* Scrollbar personnalisée */
+.transcript-content::-webkit-scrollbar {
+  width: 8px;
+  /* ✅ Plus large */
+}
+
+.transcript-content::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.transcript-content::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 4px;
+}
+
+.transcript-content::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+}
+
+/* === 🌙 Animations d'entrée === */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.header {
+  animation: fadeInUp 0.5s ease-out 0.1s backwards;
+}
+
+.status-indicator {
+  animation: fadeInUp 0.5s ease-out 0.2s backwards;
+}
+
+#mic-button {
+  animation: fadeInUp 0.5s ease-out 0.3s backwards;
+}
+
+.status-card {
+  animation: fadeInUp 0.5s ease-out 0.4s backwards;
+}
+
+/* === 📱 Responsive === */
+@media (max-width: 400px) {
+  body {
+    min-width: 320px;
+  }
+
+  #container {
+    margin: 12px;
+    padding: 24px 20px;
+  }
+
+  h1 {
+    font-size: 28px;
+  }
+
+  #mic-button {
+    width: 100px;
+    height: 100px;
+  }
+
+  .mic-icon {
+    font-size: 46px;
+  }
+}

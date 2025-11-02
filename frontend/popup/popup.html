@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <title>AVN Agent</title>
+    <link rel="stylesheet" href="popup.css">
+</head>
+
+<body>
+    <div id="container">
+        <!-- Header avec logo et titre -->
+        <div class="header">
+            <div class="logo">🤖</div>
+            <h1>AVN Agent</h1>
+            <p class="subtitle">Assistant vocal intelligent</p>
+        </div>
+
+        <!-- LED Status Indicator -->
+        <div class="status-indicator">
+            <span class="led" id="led-status"></span>
+            <span id="connection-status">Connecté</span>
+            <button id="reset-session" class="reset-btn" title="Nouvelle session">🔄</button>
+        </div>
+
+        <!-- Bouton Microphone Principal -->
+        <button id="mic-button" class="idle" title="Cliquer pour parler">
+            <div class="mic-icon">🎙️</div>
+            <div class="mic-waves">
+                <span></span>
+                <span></span>
+                <span></span>
+            </div>
+        </button>
+
+        <!-- Status Display (Transcription/Réponse) -->
+        <div id="status-display" class="status-card">
+            <p class="status-text">Prêt à écouter...</p>
+        </div>
+
+        <!-- Transcript Box (pour les longues réponses) -->
+        <div id="transcript-box" class="transcript-box hidden">
+            <div class="transcript-header">
+                <span class="transcript-icon">💬</span>
+                <span class="transcript-title">Conversation</span>
+            </div>
+            <div id="transcript-content" class="transcript-content"></div>
+        </div>
+    </div>
+    <script src="../scripts/popup-stt.js"></script>
+    <script src="popup.js"></script>
+</body>
+
+</html>

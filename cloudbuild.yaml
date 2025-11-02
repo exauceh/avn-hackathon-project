@@ -1,33 +1,79 @@
 steps:
-- name: 'gcr.io/cloud-builders/docker'
-  id: Build-Image
-  args:
-    - 'build'
-    - '-t'
-    - 'europe-west9-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/gcpu_hackathon:$COMMIT_SHA'
-    - '.'
+  # Build API Gateway
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-t'
+      - 'gcr.io/$PROJECT_ID/api-gateway:$SHORT_SHA'
+      - '-f'
+      - 'cloud/services/api-gateway/Dockerfile'
+      - '.'
+    id: 'build-api-gateway'
 
-- name: 'gcr.io/cloud-builders/docker'
-  id: Push-Image
-  args:
-    - 'push'
-    - 'europe-west9-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/gcpu_hackathon:$COMMIT_SHA'
+  # Build Agents
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-t'
+      - 'gcr.io/$PROJECT_ID/agents:$SHORT_SHA'
+      - '-f'
+      - 'core/agents/Dockerfile'
+      - '.'
+    id: 'build-agents'
 
-- name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
-  args:
-    - gcloud
-    - run
-    - deploy
-    - gcpu-hackathon-2025
-    - --image
-    - 'europe-west9-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/gcpu_hackathon:$COMMIT_SHA'
-    - --region
-    - europe-west9
-    - --platform
-    - managed
+  # Push images
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'gcr.io/$PROJECT_ID/api-gateway:$SHORT_SHA']
+    waitFor: ['build-api-gateway']
+    id: 'push-api-gateway'
 
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'gcr.io/$PROJECT_ID/agents:$SHORT_SHA']
+    waitFor: ['build-agents']
+    id: 'push-agents' 
 
-logsBucket: 'gs://gcpu-hackathon-logs-474123' 
+  # Deploy API Gateway
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'deploy'
+      - 'api-gateway'
+      - '--image=gcr.io/$PROJECT_ID/api-gateway:$SHORT_SHA'
+      - '--region=europe-west9'
+      - '--platform=managed'
+      - '--allow-unauthenticated'
+      - '--set-env-vars=GCP_PROJECT_ID=$PROJECT_ID' 
+      - '--set-secrets=GOOGLE_API_KEY=GOOGLE_API_KEY:latest,CUSTOM_SEARCH_CX=CUSTOM_SEARCH_CX:latest,GOOGLE_SEARCH_API_KEY=GOOGLE_SEARCH_API_KEY:latest'
+      - '--service-account=avn-account@avn-hackathon-project.iam.gserviceaccount.com'
+      - '--max-instances=5'
+      - '--memory=2Gi'
+      - '--timeout=300'
+    waitFor: ['push-api-gateway']
+
+  # Deploy Agents
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'deploy'
+      - 'agents'
+      - '--image=gcr.io/$PROJECT_ID/agents:$SHORT_SHA'
+      - '--region=europe-west9'
+      - '--platform=managed'
+      - '--allow-unauthenticated'
+      - '--set-secrets=GOOGLE_API_KEY=GOOGLE_API_KEY:latest,CUSTOM_SEARCH_CX=CUSTOM_SEARCH_CX:latest,GOOGLE_SEARCH_API_KEY=GOOGLE_SEARCH_API_KEY:latest'
+      - '--service-account=avn-account@avn-hackathon-project.iam.gserviceaccount.com'
+      - '--max-instances=5'
+      - '--memory=4Gi'
+      - '--timeout=600'
+      - '--cpu=2'
+    waitFor: ['push-agents']
 
 images:
-- 'europe-west9-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/gcpu_hackathon:$COMMIT_SHA' # <-- 3. CHANGEMENT ICI
+  - 'gcr.io/$PROJECT_ID/api-gateway:$SHORT_SHA'
+  - 'gcr.io/$PROJECT_ID/agents:$SHORT_SHA'
+
+options:
+  machineType: 'E2_HIGHCPU_8'
+  logging: CLOUD_LOGGING_ONLY

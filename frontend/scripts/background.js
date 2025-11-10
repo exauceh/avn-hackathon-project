@@ -3,6 +3,7 @@ let currentRequestId = null;
 let pollInterval = null;
 let currentPageContext = {}; // Contexte de la page courante
 
+
 // Gestion de l'état du graphe en mémoire
 const GRAPH_STATE_KEY = 'avn_graph_state';
 let graphState = {
@@ -15,6 +16,7 @@ let graphState = {
   conversation_history: []
 };
 
+
 // État de lecture TTS
 let ttsState = {
   isPlaying: false,
@@ -22,7 +24,7 @@ let ttsState = {
   currentAction: null,
   mainReadingAction: null,
   isReadingActive: false,
-  wasInterrupted: false  // ✅ NOUVEAU : Flag d'interruption sans polluer les messages
+  wasInterrupted: false  // 
 };
 
 // Charger l'état du graphe depuis le localStorage au démarrage

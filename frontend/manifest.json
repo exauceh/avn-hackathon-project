@@ -36,8 +36,8 @@
   "commands": {
     "toggle-listen": {
       "suggested_key": {
-        "default": "Ctrl+Space",
-        "mac": "Command+Space"
+        "default": "Ctrl+Y",
+        "mac": "Ctrl+Y"
       },
       "description": "Activer l'extension AVN"
     }

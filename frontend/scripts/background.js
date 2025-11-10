@@ -20,9 +20,7 @@ let ttsState = {
   isPlaying: false,
   canInterrupt: false,
   currentAction: null,
-  mainReadingAction: null,
-  isReadingActive: false,
-  wasInterrupted: false
+  audioStartTime: 0
 };
 
 function generateSessionId() {
@@ -59,9 +57,7 @@ function resetGraphState() {
     isPlaying: false,
     canInterrupt: false,
     currentAction: null,
-    mainReadingAction: null,
-    isReadingActive: false,
-    wasInterrupted: false
+    audioStartTime: 0
   };
 
   saveGraphState();
@@ -134,11 +130,8 @@ async function getPageContext() {
 
 async function sendTranscriptionToServer(transcription, isInterruption = false) {
   try {
-    if (isInterruption && ttsState.isReadingActive) {
-      console.log('🛑 Interruption pendant lecture active');
-      ttsState.wasInterrupted = true;
-    } else if (isInterruption && !ttsState.isReadingActive) {
-      ttsState.wasInterrupted = false;
+    if (isInterruption) {
+      console.log('🛑 Interruption vocale détectée');
     }
 
     console.log('📤 Envoi transcription');
@@ -174,8 +167,7 @@ async function sendTranscriptionToServer(transcription, isInterruption = false) 
         messages: graphState.messages,
         conversation_history: graphState.conversation_history,
         last_action: graphState.last_action,
-        search_results: graphState.search_results,
-        was_interrupted: ttsState.wasInterrupted
+        search_results: graphState.search_results
       }
     };
 
@@ -273,6 +265,11 @@ function startPolling(requestId) {
   }, 1000);
 }
 
+function estimateAudioDuration(text) {
+  const wordCount = text.split(/\s+/).length;
+  return wordCount / 2.5;  // Moyenne de 2.5 mots par seconde
+}
+
 async function handleAgentResponse(data) {
   console.log("🤖 Réponse agent:", data);
 
@@ -299,57 +296,54 @@ async function handleAgentResponse(data) {
     graphState.search_results = data.action.data;
   }
 
+  // ✅ LOGIQUE SIMPLE : Interruption basée sur la durée de l'audio
+  let canInterrupt = false;
+  let isReadingAction = false;
+
+  if (data.text) {
+    const estimatedDuration = estimateAudioDuration(data.text);
+    canInterrupt = estimatedDuration > 10;  // Plus de 10 secondes = interruptible
+    console.log(`📊 Durée audio: ${estimatedDuration.toFixed(1)}s → Interruption ${canInterrupt ? 'activée' : 'désactivée'}`);
+  }
+
+  // ✅ Reprise automatique UNIQUEMENT pour les actions de lecture
+  if (data.action?.type === 'reading' || data.action?.type === 'clarification') {
+    isReadingAction = true;
+    console.log('📖 Action de lecture → Reprise automatique activée');
+  }
+
+  ttsState.canInterrupt = canInterrupt;
+  ttsState.currentAction = data.action;
+
   if (data.action?.type) {
-    graphState.last_action = {
-      ...data.action,
-      timestamp: new Date().toISOString()
-    };
-
-    if (data.action.type === 'reading') {
-      const isClarification = data.action.status === 'clarification_response';
-
-      if (!isClarification) {
-        ttsState.mainReadingAction = data.action;
-        ttsState.canInterrupt = data.action.can_interrupt || false;
-        ttsState.isPlaying = false;
-        ttsState.isReadingActive = true;
-        console.log(`📖 Lecture principale: ${data.action.status}`);
-      }
-
-      ttsState.currentAction = data.action;
-    }
-
-    await executeAgentAction(data.action);
+    graphState.last_action = data.action;
+    executeAgentAction(data.action);
   }
 
   saveGraphState();
 
   if (data.audio) {
-    const isClarification = data.action?.status === 'clarification_response';
+    ttsState.isPlaying = true;
+    ttsState.audioStartTime = Date.now();
 
-    if (!isClarification) {
-      ttsState.isPlaying = true;
-      chrome.runtime.sendMessage({
-        action: 'tts_started',
-        canInterrupt: ttsState.canInterrupt
-      }).catch(() => { });
-    }
+    chrome.runtime.sendMessage({
+      action: 'tts_started',
+      canInterrupt: canInterrupt
+    }).catch(() => { });
 
-    playAudio(data.audio, isClarification).then(() => {
-      if (!isClarification) {
-        ttsState.isPlaying = false;
-      }
+    playAudio(data.audio, canInterrupt, isReadingAction).then(() => {
+      ttsState.isPlaying = false;
+      ttsState.canInterrupt = false;
+      ttsState.currentAction = null;
+      chrome.runtime.sendMessage({ action: 'tts_finished' }).catch(() => { });
     }).catch(() => {
-      if (!isClarification) {
-        ttsState.isPlaying = false;
-      }
+      ttsState.isPlaying = false;
+      ttsState.canInterrupt = false;
+      ttsState.currentAction = null;
+      chrome.runtime.sendMessage({ action: 'tts_finished' }).catch(() => { });
     });
 
     updatePopupStatus(`🤖 ${data.text ?? 'Réponse reçue'}`);
-  }
-
-  if (ttsState.wasInterrupted) {
-    ttsState.wasInterrupted = false;
   }
 }
 
@@ -413,27 +407,15 @@ async function executeAgentAction(action) {
 }
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message.type === 'clarification-audio-finished') {
-    chrome.runtime.sendMessage({ action: 'clarification_prompt' }).catch(() => { });
-    sendResponse({ ok: true });
-    return true;
-  }
-
-  if (message.action === 'resume_audio') {
-    chrome.runtime.sendMessage({ target: 'offscreen', type: 'resume-audio' }).catch(() => { });
-    sendResponse({ ok: true });
-    return true;
-  }
-
-  if (message.action === 'clarification_followup') {
-    updatePopupStatus(`⏳ ${message.transcript}`);
-    sendTranscriptionToServer(message.transcript || '', true);
+  if (message.action === 'content_recognition_result') {
+    updatePopupStatus(`✅ ${message.transcript}`);
+    sendTranscriptionToServer(message.transcript, false);
     sendResponse({ ok: true });
     return true;
   }
 
   if (message.action === 'interrupt_tts') {
-    // Arrêter immédiatement l'audio
+    // Arrêter l'audio en pause (pour reprise possible si lecture)
     chrome.runtime.sendMessage({ target: 'offscreen', type: 'pause-audio' }).catch(() => { });
 
     // Mettre à jour l'état TTS
@@ -446,92 +428,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
-  if (message.type === 'audio-paused') {
-    ttsState.isPlaying = false;
-    sendResponse({ ok: true });
-    return true;
-  }
-
-  if (message.type === 'audio-resumed') {
-    ttsState.isPlaying = true;
-
-    if (ttsState.mainReadingAction) {
-      ttsState.canInterrupt = ttsState.mainReadingAction.can_interrupt || false;
-    } else {
-      ttsState.canInterrupt = false;
-    }
-
-    chrome.runtime.sendMessage({
-      action: 'tts_started',
-      canInterrupt: ttsState.canInterrupt
-    }).catch(() => { });
-
-    sendResponse({ ok: true });
-    return true;
-  }
-
-  if (message.type === 'audio-playback-finished') {
-    ttsState.isPlaying = false;
-    ttsState.canInterrupt = false;
-
-    if (ttsState.currentAction?.type === 'reading') {
-      const status = ttsState.currentAction.status;
-      if (status === 'completed' || status === 'continuing') {
-        ttsState.isReadingActive = false;
-        ttsState.mainReadingAction = null;
-      }
-    }
-
-    chrome.runtime.sendMessage({ action: 'tts_finished' }).catch(() => { });
-    sendResponse({ ok: true });
-    return true;
-  }
-
-  if (message.action === 'content_recognition_result') {
-    if (!message.transcript) {
-      updatePopupStatus('⚠️ Aucune parole détectée');
-      return true;
-    }
-    updatePopupStatus(`✅ ${message.transcript}`);
-    sendTranscriptionToServer(message.transcript, false);
-    sendResponse({ ok: true });
-    return true;
-  }
-
-  if (message.action === 'page_loaded') {
-    currentPageContext = message.data;
-    sendResponse({ ok: true });
-    return true;
-  }
-
-  if (message.action === 'form_submitted') {
-    updatePopupStatus('✅ Formulaire soumis !');
-    sendResponse({ ok: true });
-    return true;
-  }
-
-  if (message.action === 'get_graph_state') {
-    sendResponse({ state: graphState });
-    return true;
-  }
-
   if (message.action === 'reset_graph_state') {
     resetGraphState();
-    sendResponse({ ok: true, session_id: graphState.session_id });
-    return true;
-  }
-
-  if (message.action === 'set_user_email') {
-    graphState.user_email = message.email;
-    saveGraphState();
     sendResponse({ ok: true });
     return true;
   }
-
-  return true;
 });
 
-function playAudio(base64Audio, isClarification = false) {
+function playAudio(base64Audio, canInterrupt = false, isReading = false) {
   return new Promise((resolve, reject) => {
     const messageListener = (message) => {
       if (message.type === 'audio-playback-finished') {
@@ -540,6 +444,24 @@ function playAudio(base64Audio, isClarification = false) {
       } else if (message.type === 'audio-stopped') {
         chrome.runtime.onMessage.removeListener(messageListener);
         reject(new Error('Audio interrompu'));
+      } else if (message.type === 'audio-resumed') {
+        chrome.runtime.onMessage.removeListener(messageListener);
+
+        ttsState.isPlaying = true;
+        ttsState.canInterrupt = true;
+
+        chrome.runtime.sendMessage({
+          action: 'tts_started',
+          canInterrupt: true
+        }).catch(() => { });
+
+        const resumeListener = (msg) => {
+          if (msg.type === 'audio-playback-finished') {
+            chrome.runtime.onMessage.removeListener(resumeListener);
+            resolve();
+          }
+        };
+        chrome.runtime.onMessage.addListener(resumeListener);
       }
     };
 
@@ -549,8 +471,8 @@ function playAudio(base64Audio, isClarification = false) {
       type: 'play-audio',
       target: 'offscreen',
       audio_data: base64Audio,
-      canInterrupt: ttsState.canInterrupt && !isClarification,
-      isClarification
+      canInterrupt: canInterrupt,
+      isReading: isReading
     };
 
     chrome.offscreen.createDocument({
@@ -583,7 +505,7 @@ if (chrome.commands?.onCommand) {
           .catch((e) => {
             console.error('Erreur PENDANT l\'ouverture du side panel:', e);
           });
-          
+
       } catch (e) {
         console.error('Erreur SYNCHRONE ouverture side panel:', e);
         chrome.runtime.sendMessage({ action: 'start_hotword_from_shortcut' }).catch(() => { });

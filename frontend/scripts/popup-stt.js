@@ -1,6 +1,6 @@
 let globalRecognition = null;
 let isListening = false;
-let currentMode = 'active'; // hotword,active, interruption,confirmation
+let currentMode = 'active'; // hotword, active, interruption
 let waitingForTTS = false;
 let inactivityCount = 0;
 let isTTSPlaying = false;
@@ -10,9 +10,13 @@ let lastTranscript = '';
 let interimTimeout = null;
 let lastCommandTime = 0;
 let processingCommand = false;
+let speechDuration = 0;
+let speechStartTime = 0;
 
 const MAX_INACTIVITY = 3;
 const MIN_COMMAND_INTERVAL = 1000;
+const MIN_SPEECH_DURATION = 800; // ✅ Durée minimale de parole pour éviter les bruits (ms)
+const MIN_CONFIDENCE = 0.6; // ✅ Confiance minimale pour une vraie parole
 
 function playHumSound() {
     try {
@@ -42,7 +46,8 @@ function stopTTSImmediate() {
     if (isTTSPlaying && window.speechSynthesis) {
         window.speechSynthesis.cancel();
     }
-    chrome.runtime.sendMessage({ target: 'offscreen', type: 'pause-audio' }).catch(() => { });
+    // ✅ Envoyer 'stop-audio' pour un arrêt net et l'annulation de la reprise auto
+    chrome.runtime.sendMessage({ target: 'offscreen', type: 'stop-audio' }).catch(() => { });
 }
 
 
@@ -86,22 +91,11 @@ function initializeGlobalRecognition() {
 
     globalRecognition.onspeechstart = () => {
         speechStarted = true;
+        speechStartTime = Date.now();
         console.log('🗣️ Parole détectée');
 
-        // Interruption immédiate du TTS dès que l'utilisateur parle
-        if (isTTSPlaying && (canInterruptTTS || currentMode === 'interruption')) {
-            console.log('🛑 Utilisateur parle - Interruption TTS immédiate');
-            stopTTSImmediate();
-
-            // Feedback audio rapide
-            setTimeout(() => playHumSound(), 50);
-
-            // Basculer en mode active pour capturer la commande
-            if (currentMode === 'interruption') {
-                currentMode = 'active';
-                notifyRecordingState();
-            }
-        }
+        // Notifier offscreen pour annuler la reprise auto
+        chrome.runtime.sendMessage({ target: 'offscreen', type: 'user-speaking' }).catch(() => { });
 
         if (interimTimeout) {
             clearTimeout(interimTimeout);
@@ -120,6 +114,27 @@ function initializeGlobalRecognition() {
         const confidence = result[0].confidence;
 
         console.log(`📝 ${isFinal ? 'Final' : 'Interim'}: "${transcript}" (Mode: ${currentMode}, Conf: ${confidence?.toFixed(2) || 'N/A'})`);
+
+        // ✅ INTERRUPTION : Si TTS en cours ET parole assez longue
+        if (isTTSPlaying && canInterruptTTS) {
+            const currentSpeechDuration = Date.now() - speechStartTime;
+            const wordCount = transcript.split(/\s+/).length;
+
+            // Interrompre si : durée > 800ms OU plus de 3 mots
+            if (currentSpeechDuration > MIN_SPEECH_DURATION || wordCount >= 3) {
+                console.log('🛑 Interruption valide - Arrêt TTS');
+                stopTTSImmediate();
+                setTimeout(() => playHumSound(), 50);
+
+                // Basculer en mode active pour traiter la commande
+                if (currentMode === 'interruption') {
+                    currentMode = 'active';
+                    notifyRecordingState();
+                }
+            } else {
+                console.log(`⏸️ Parole trop courte (${currentSpeechDuration}ms, ${wordCount} mots)`);
+            }
+        }
 
         // Clear previous timeout
         if (interimTimeout) {
@@ -140,30 +155,39 @@ function initializeGlobalRecognition() {
                 notifyRecordingState();
             }
         } else if (currentMode === 'active') {
-            // Utiliser les résultats intermédiaires pour détecter plus vite
+            // Traiter les commandes finales avec filtre qualité
             if (isFinal && transcript.length > 0) {
-                handleActiveCommand(transcript);
+                const wordCount = transcript.split(/\s+/).length;
+                const hasMinConfidence = !confidence || confidence >= MIN_CONFIDENCE;
+
+                if (wordCount >= 2 && hasMinConfidence) {
+                    handleActiveCommand(transcript);
+                } else {
+                    console.log(`⏸️ Commande filtrée (${wordCount} mots, conf: ${confidence?.toFixed(2) || 'N/A'})`);
+                }
             } else if (!isFinal && transcript.length > 10) {
-                // Mettre à jour l'UI avec le transcript en cours
+                // Feedback visuel en temps réel
                 chrome.runtime.sendMessage({
                     action: 'update_status',
                     data: `⏳ "${transcript}..."`
                 }).catch(() => { });
             }
         } else if (currentMode === 'interruption') {
-            // Réagir plus rapidement aux interruptions
+            // Mode interruption : traiter la clarification
             if (isFinal && transcript.length > 0) {
-                handleInterruption(transcript);
+                const wordCount = transcript.split(/\s+/).length;
+                const hasMinConfidence = !confidence || confidence >= MIN_CONFIDENCE;
+
+                if (wordCount >= 2 && hasMinConfidence) {
+                    handleInterruption(transcript);
+                } else {
+                    console.log(`⏸️ Interruption filtrée (${wordCount} mots, conf: ${confidence?.toFixed(2) || 'N/A'})`);
+                }
             } else if (!isFinal && transcript.length > 5) {
-                // Afficher un feedback immédiat
                 chrome.runtime.sendMessage({
                     action: 'update_status',
                     data: `✋ "${transcript}..."`
                 }).catch(() => { });
-            }
-        } else if (currentMode === 'confirmation') {
-            if (isFinal && transcript.length > 0) {
-                handleConfirmation(transcript);
             }
         }
 
@@ -222,22 +246,22 @@ function restartRecognition() {
 }
 
 function handleActiveCommand(transcript) {
-    // ✅ Filtrer le hotword
+    // Filtrer le hotword
     const isHotword = transcript.toLowerCase().includes('hello');
     if (isHotword) {
-        console.log('🔥 Hotword détecté dans commande active - Ignoré');
+        console.log('🔥 Hotword ignoré en mode actif');
         playHumSound();
         return;
     }
 
-    // Éviter les commandes en double
+    // Anti-rebond : éviter les commandes multiples
     const now = Date.now();
     if (processingCommand || (now - lastCommandTime) < MIN_COMMAND_INTERVAL) {
-        console.log('⏸️ Commande ignorée (trop rapprochée)');
+        console.log('⏸️ Commande trop rapide - ignorée');
         return;
     }
 
-    console.log('📤 Commande active:', transcript);
+    console.log('📤 Commande:', transcript);
     lastCommandTime = now;
     processingCommand = true;
     lastTranscript = '';
@@ -255,10 +279,10 @@ function handleActiveCommand(transcript) {
 }
 
 function handleInterruption(transcript) {
-    // Éviter les interruptions multiples
+    // Anti-rebond
     const now = Date.now();
     if (processingCommand || (now - lastCommandTime) < MIN_COMMAND_INTERVAL) {
-        console.log('⏸️ Interruption ignorée (trop rapprochée)');
+        console.log('⏸️ Interruption trop rapide - ignorée');
         return;
     }
 
@@ -266,7 +290,7 @@ function handleInterruption(transcript) {
     lastCommandTime = now;
     processingCommand = true;
 
-    // Passer immédiatement en mode active pour traiter la commande
+    // Basculer en mode actif et réinitialiser les états
     currentMode = 'active';
     lastTranscript = '';
     waitingForTTS = true;
@@ -280,45 +304,10 @@ function handleInterruption(transcript) {
         transcript: transcript
     });
 
-    // Réinitialiser après un délai
     setTimeout(() => {
         processingCommand = false;
     }, 2000);
 }
-
-function handleConfirmation(transcript) {
-    console.log('✅ Confirmation:', transcript);
-    lastTranscript = '';
-
-    const yesPatterns = /\b(yes|oui|resume|yep|yeah|correct|ok|okay|sure|continue|go ahead)\b/i;
-
-    if (transcript.toLowerCase().match(yesPatterns)) {
-        chrome.runtime.sendMessage({ action: 'resume_audio' });
-        chrome.runtime.sendMessage({
-            action: 'update_status',
-            data: '✅ Reprise de la lecture principale...'
-        });
-
-        // Revenir en mode interruption pendant la reprise
-        currentMode = 'interruption';
-        isTTSPlaying = true;
-    } else {
-        chrome.runtime.sendMessage({
-            action: 'clarification_followup',
-            transcript: transcript
-        });
-        chrome.runtime.sendMessage({
-            action: 'update_status',
-            data: `⏳ Envoi de votre question...`
-        });
-
-        currentMode = 'active';
-        waitingForTTS = true;
-    }
-
-    notifyRecordingState();
-}
-
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message?.action === 'tts_started') {
@@ -330,7 +319,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             currentMode = 'interruption';
             console.log('🎧 TTS démarré - Interruption possible');
         } else {
-            console.log('🎧 TTS démarré - Pas d\'interruption');
+            console.log('🎧 TTS court - Veuillez patienter');
         }
 
         notifyRecordingState();
@@ -345,17 +334,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         inactivityCount = 0;
         processingCommand = false;
 
-        currentMode = 'active';
-        console.log('✅ TTS terminé - Mode actif');
-        playHumSound();
+        // Retour en mode actif avec feedback sonore
+        if (currentMode !== 'active') {
+            currentMode = 'active';
+            console.log('✅ TTS terminé - Mode actif');
+            playHumSound();
+        }
 
-        notifyRecordingState();
-        sendResponse({ ok: true });
-        return true;
-    }
-
-    if (message?.action === 'clarification_prompt') {
-        currentMode = 'confirmation';
         notifyRecordingState();
         sendResponse({ ok: true });
         return true;

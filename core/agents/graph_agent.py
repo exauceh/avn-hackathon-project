@@ -131,17 +131,6 @@ class AVNGraphAgent:
         
         last_message = state["messages"][-1].content if state["messages"] else ""
         
-        #   DÉTECTER L'INTERRUPTION depuis un flag dédié (pas dans les messages)
-        # Ce flag est passé dans le graph_state depuis le frontend
-        has_interruption = state.get("was_interrupted", False)
-        
-        if has_interruption:
-            state["next_agent"] = "reading"
-            state["was_interrupted"] = False  #   Nettoyer le flag immédiatement
-            print(f"🎯 Router: INTERRUPTION → reading (clarification)")
-            print(f"🎯 Message utilisateur: {last_message[:50]}...")
-            return state
-        
         # Create a prompt for the router
         system_prompt = """
         You are an intelligent router for a voice assistant.
@@ -285,9 +274,40 @@ class AVNGraphAgent:
             "next_agent": "",
             "action": {},
             "response_text": "",
-            "needs_confirmation": False,
-            "was_interrupted": False  #   NOUVEAU
+            "needs_confirmation": False
         }
+        
+        # Restaurer l'historique depuis le graph_state
+        if graph_state:
+            # Restaurer les messages existants
+            existing_messages = graph_state.get("messages", [])
+            # Convertir les dictionnaires en objets Message
+            converted_messages = []
+            for msg in existing_messages:
+                if isinstance(msg, dict):
+                    role = msg.get("role", "user")
+                    content = msg.get("content", "")
+                    if role == "user":
+                        converted_messages.append(HumanMessage(content=content))
+                    elif role == "assistant":
+                        converted_messages.append(AIMessage(content=content))
+                else:
+                    converted_messages.append(msg)
+            
+            # Ajouter le nouveau message
+            converted_messages.append(HumanMessage(content=user_message))
+            initial_state["messages"] = converted_messages
+            
+            # Restaurer les résultats de recherche
+            if graph_state.get("search_results"):
+                initial_state["search_results"] = graph_state["search_results"]
+            
+            # Restaurer l'action précédente
+            if graph_state.get("last_action"):
+                initial_state["action"] = graph_state["last_action"]
+            
+            print(f"📚 État restauré: {len(converted_messages)} messages, "
+                  f"{len(initial_state['search_results'])} résultats")
         
         #   RESTAURER L'HISTORIQUE DEPUIS LE GRAPH_STATE
         if graph_state:

@@ -53,10 +53,7 @@ class ReadingAgent:
             print(f"▶️ Intent: Start reading")
             print("="*60)
             return self._start_reading(state)
-        elif self._is_resume_request(last_message):
-            print(f"⏯️ Intent: Resume reading")
-            print("="*60)
-            return self._resume_reading(state)
+
         else:
             # Default: treat as start reading
             print(f"▶️ Default intent: Start reading")
@@ -78,37 +75,19 @@ class ReadingAgent:
     def _is_clarification_request(self, message: str, state: Dict[str, Any]) -> bool:
         """Check if user interrupted with a clarification question"""
         
-        # 1. Check if we are in reading mode
+        # 1. Vérifier si on est en mode lecture
         if not self.reading_state["is_reading"]:
-            print(f"📖 Not in reading mode, this is not a clarification")
+            print(f"📖 Not in reading mode, not a clarification")
             return False
         
-        # 2. Check FIRST if there is an interruption system message
-        messages = state.get("messages", [])
-        has_interruption_flag = False
-        
-        # Browse last messages to find interruption flag
-        for i in range(len(messages) - 1, max(0, len(messages) - 5), -1):
-            msg = messages[i]
-            if hasattr(msg, 'content'):
-                if msg.content == 'USER_INTERRUPTED_READING':
-                    has_interruption_flag = True
-                    print(f"🛑 Interruption flag detected at position {i}")
-                    break
-        
-        # 3. If interruption flag present, it's ALWAYS a clarification
-        if has_interruption_flag:
-            print(f"✅ Interruption confirmed: {message[:50]}...")
-            return True
-        
-        # 4. Otherwise, check question keywords (fallback)
+        # 2. Détecter les mots-clés de question (logique simple)
         question_keywords = ['what', 'who', 'why', 'how', 'when', 'where', 
-                            'what is', 'explain', 'tell me']
+                            'what is', 'explain', 'tell me', 'define', 'describe']
         
         is_question = any(keyword in message for keyword in question_keywords)
         
         if is_question:
-            print(f"❓ Question detected (without flag): {message[:50]}...")
+            print(f"❓ Clarification détectée: {message[:50]}...")
         
         return is_question
     
@@ -162,7 +141,6 @@ class ReadingAgent:
         print(f"   - URL: {current_url}")
         print(f"   - Chunks: {len(chunks)}")
         print(f"   - Position: 0/{len(chunks)}")
-        print(f"   - Interruption possible: YES")
         
         # Read first chunk
         first_chunk = chunks[0] if chunks else ""
@@ -173,12 +151,11 @@ class ReadingAgent:
         
         state["action"] = {
             "type": "reading",
-            "status": "started",
             "article_url": current_url,
             "article_title": page_title,
             "chunk_index": 0,
             "total_chunks": len(chunks),
-            "can_interrupt": True
+            "is_reading_action": True  # Flag pour la reprise automatique
         }
         
         state["needs_confirmation"] = False
@@ -407,25 +384,20 @@ class ReadingAgent:
             
             response = self.llm.invoke(messages)
             answer = response.content.strip()
-            
-            # Ajouter la question de confirmation directement dans response_text
-            confirm_prompt = " Does this answer satisfy you? Reply 'yes' to resume reading or ask another question."
 
-            state["response_text"] = answer + "\n\n" + confirm_prompt
+            state["response_text"] = answer
             
         except Exception as e:
             print(f"❌ Error generating clarification: {e}")
-            state["response_text"] = "I'm not sure about that. " + "Est-ce que cette réponse vous convient ? Répondez 'oui' pour reprendre la lecture ou posez une autre question."
+            state["response_text"] = "I'm not sure about that."
 
-        # ✅ Le front gérera automatiquement la reprise après le TTS et la confirmation utilisateur
         state["action"] = {
-            "type": "reading",
-            "status": "clarification_response",
+            "type": "clarification",
             "article_url": self.reading_state["article_url"],
             "article_title": self.reading_state["article_title"],
             "chunk_index": self.reading_state["current_position"],
             "total_chunks": len(self.reading_state["content_chunks"]),
-            "can_interrupt": False  # ✅ Pas d'interruption pendant la clarification audio de la réponse
+            "is_reading_action": True  # Flag pour permettre la reprise
         }
         
         state["needs_confirmation"] = False
@@ -434,53 +406,6 @@ class ReadingAgent:
         
         return state
     
-    def _resume_reading(self, state: Dict[str, Any]) -> Dict[str, Any]:
-        """Resume reading after a pause"""
-        
-        if not self.reading_state["is_reading"]:
-            state["response_text"] = "I'm not currently reading anything. What would you like me to do?"
-            state["action"] = {"type": "info"}
-            state["needs_confirmation"] = False
-            return state
-        
-        # ✅ Resume from CURRENT position (not next)
-        self.reading_state["paused"] = False
-        current_pos = self.reading_state["current_position"]
-        chunks = self.reading_state["content_chunks"]
-        
-        if current_pos >= len(chunks):
-            # Finished reading
-            self.reading_state["is_reading"] = False
-            state["response_text"] = (
-                f"We've finished reading {self.reading_state['article_title']}. "
-                f"Is there anything else you'd like to know?"
-            )
-            state["action"] = {
-                "type": "reading",
-                "status": "completed",
-                "article_title": self.reading_state["article_title"]
-            }
-        else:
-            # ✅ Continue reading from CURRENT position
-            current_chunk = chunks[current_pos]
-            
-            state["response_text"] = f"{current_chunk}"
-            state["action"] = {
-                "type": "reading",
-                "status": "resuming",  # ✅ Nouveau statut
-                "article_url": self.reading_state["article_url"],
-                "article_title": self.reading_state["article_title"],
-                "chunk_index": current_pos,
-                "total_chunks": len(chunks),
-                "can_interrupt": True
-            }
-        
-        state["needs_confirmation"] = False
-        
-        print(f"⏯️ Resumed reading: chunk {current_pos}/{len(chunks)}")
-        
-        return state
-
 
 # Standalone test
 if __name__ == "__main__":

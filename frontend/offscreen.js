@@ -1,26 +1,25 @@
-let mediaRecorder = null;
-let audioChunks = [];
 let currentAudio = null;
 let pausedAudio = null;
 let pausedTime = 0;
-let lastPlayedIsClarification = false;
 let fadeOutInterval = null;
+let silenceTimer = null;
+let isReading = false;  // Flag simple : est-ce une action de lecture ?
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.target !== 'offscreen') return true;
 
     switch (message.type) {
         case 'play-audio':
-            playAudio(message.audio_data, message.canInterrupt, message.isClarification === true);
+            playAudio(message.audio_data, message.canInterrupt, message.isReading);
             break;
         case 'pause-audio':
             pauseAudio();
             break;
-        case 'resume-audio':
-            resumeAudio();
-            break;
         case 'stop-audio':
             stopAudio();
+            break;
+        case 'user-speaking':
+            handleUserSpeaking();
             break;
     }
 
@@ -33,13 +32,14 @@ function pauseAudio() {
         pausedTime = currentAudio.currentTime;
         pausedAudio = currentAudio;
 
-        // Nettoyer le fade précédent si existant
+        console.log(`⏸️ Audio en pause - isReading: ${isReading}, time: ${pausedTime.toFixed(1)}s`);
+
+        // Fade out rapide pour une interruption douce
         if (fadeOutInterval) {
             clearInterval(fadeOutInterval);
             fadeOutInterval = null;
         }
 
-        // Fade out rapide pour une interruption plus douce
         fadeOutInterval = setInterval(() => {
             if (currentAudio && currentAudio.volume > 0.1) {
                 currentAudio.volume -= 0.15;
@@ -51,20 +51,24 @@ function pauseAudio() {
                     chrome.runtime.sendMessage({ type: 'audio-paused', pausedTime }).catch(() => { });
                 }
             }
-        }, 15); // Plus rapide pour une réaction immédiate
+        }, 15);
     }
 }
 
-function playAudio(base64Audio, canInterrupt = false, isClarification = false) {
+function playAudio(base64Audio, canInterrupt = false, isReadingAction = false) {
     try {
-        if (!isClarification && currentAudio && currentAudio !== pausedAudio) {
+        console.log(`▶️ Lecture audio - canInterrupt: ${canInterrupt}, isReading: ${isReadingAction}, pausedAudio: ${!!pausedAudio}`);
+
+        clearSilenceTimer();
+
+        // Arrêter l'audio en cours s'il ne s'agit pas de l'audio pausé
+        if (currentAudio && currentAudio !== pausedAudio) {
             currentAudio.pause();
             currentAudio = null;
-        } else if (isClarification && currentAudio && !currentAudio.paused && currentAudio !== pausedAudio) {
-            pauseAudio();
         }
 
-        lastPlayedIsClarification = !!isClarification;
+        // Mettre à jour le flag global
+        isReading = isReadingAction;
 
         const audioData = atob(base64Audio);
         const arrayBuffer = new ArrayBuffer(audioData.length);
@@ -77,22 +81,25 @@ function playAudio(base64Audio, canInterrupt = false, isClarification = false) {
         const blob = new Blob([arrayBuffer], { type: 'audio/mp3' });
         const audioUrl = URL.createObjectURL(blob);
         currentAudio = new Audio(audioUrl);
-        currentAudio.volume = 0.7; // Volume initial
+        currentAudio.volume = 0.7;
 
         currentAudio.onended = () => {
             URL.revokeObjectURL(audioUrl);
+            const wasPaused = !!pausedAudio;
+            currentAudio = null;
 
-            if (lastPlayedIsClarification) {
-                lastPlayedIsClarification = false;
-                chrome.runtime.sendMessage({ type: 'clarification-audio-finished' }).catch(() => { });
-                currentAudio = null;
-                return;
-            }
+            console.log(`🎵 Audio terminé - pausedAudio: ${wasPaused}, isReading: ${isReading}`);
 
-            if (pausedAudio) {
-                setTimeout(() => resumeAudio(), 500);
+            // ✅ REPRISE AUTOMATIQUE : Seulement si on est en mode lecture ET qu'il y a un audio en pause
+            if (wasPaused && isReading) {
+                console.log('🔇 Clarification terminée → Timer de reprise (4s)');
+                startSilenceTimer();
             } else {
-                currentAudio = null;
+                console.log('✅ Fin normale - Pas de reprise');
+                if (pausedAudio) {
+                    pausedAudio = null;
+                    pausedTime = 0;
+                }
                 chrome.runtime.sendMessage({ type: 'audio-playback-finished' }).catch(() => { });
             }
         };
@@ -111,10 +118,20 @@ function playAudio(base64Audio, canInterrupt = false, isClarification = false) {
 }
 
 function resumeAudio() {
+    clearSilenceTimer();
+
     if (pausedAudio) {
+        console.log('▶️ Reprise automatique de la lecture');
         currentAudio = pausedAudio;
         currentAudio.currentTime = pausedTime;
-        currentAudio.volume = 0.7; // Restaurer le volume
+        currentAudio.volume = 0.7;
+
+        currentAudio.onended = () => {
+            pausedAudio = null;
+            pausedTime = 0;
+            currentAudio = null;
+            chrome.runtime.sendMessage({ type: 'audio-playback-finished' }).catch(() => { });
+        };
 
         currentAudio.play().then(() => {
             pausedAudio = null;
@@ -127,8 +144,43 @@ function resumeAudio() {
     }
 }
 
+function startSilenceTimer() {
+    clearSilenceTimer();
+
+    silenceTimer = setTimeout(() => {
+        console.log('⏰ Timer de reprise expiré');
+
+        // ✅ Reprendre SEULEMENT si on est en mode lecture ET qu'il y a un audio en pause
+        if (pausedAudio && isReading) {
+            console.log('📖 Reprise automatique de la lecture');
+            resumeAudio();
+        } else {
+            console.log('🛑 Pas de reprise');
+            stopAudio();
+        }
+    }, 4000);  // 4 secondes de silence avant reprise
+}
+
+function clearSilenceTimer() {
+    if (silenceTimer) {
+        clearTimeout(silenceTimer);
+        silenceTimer = null;
+    }
+}
+
+function handleUserSpeaking() {
+    console.log('🗣️ Utilisateur parle → Annulation de la reprise');
+    clearSilenceTimer();
+    // Annuler la pause pour empêcher la reprise
+    if (pausedAudio) {
+        pausedAudio = null;
+        pausedTime = 0;
+    }
+}
+
 function stopAudio() {
-    // Nettoyer le fade si en cours
+    clearSilenceTimer();
+
     if (fadeOutInterval) {
         clearInterval(fadeOutInterval);
         fadeOutInterval = null;
@@ -144,6 +196,8 @@ function stopAudio() {
         pausedAudio = null;
         pausedTime = 0;
     }
+
+    isReading = false;
 
     chrome.runtime.sendMessage({ type: 'audio-stopped' }).catch(() => { });
 }

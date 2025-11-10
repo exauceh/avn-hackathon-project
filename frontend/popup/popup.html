@@ -11,7 +11,7 @@
     <div id="container">
         <!-- Header avec logo et titre -->
         <div class="header">
-            <div class="logo">🤖</div>
+            <div class="logo"><img src="../images/icon-32.svg" alt="AVN Agent Logo" /></div>
             <h1>AVN Agent</h1>
             <p class="subtitle">Assistant vocal intelligent</p>
         </div>
@@ -20,13 +20,17 @@
         <div class="status-indicator">
             <span class="led" id="led-status"></span>
             <span id="connection-status">Connecté</span>
-            <button id="reset-session" class="reset-btn" title="Nouvelle session">🔄</button>
+            <button id="theme-toggle" class="theme-toggle" title="Basculer mode haut contraste"
+                aria-label="Basculer mode haut contraste">👁️</button>
+            <button id="reset-session" class="reset-btn" title="Nouvelle session"
+                aria-label="Nouvelle session">🔄</button>
         </div>
 
         <!-- Bouton Microphone Principal -->
-        <button id="mic-button" class="idle" title="Cliquer pour parler">
-            <div class="mic-icon">🎙️</div>
-            <div class="mic-waves">
+        <button id="mic-button" class="idle" title="Cliquer pour parler" aria-label="Activer l'écoute vocale"
+            role="button">
+            <div class="mic-icon" aria-hidden="true">🎙️</div>
+            <div class="mic-waves" aria-hidden="true">
                 <span></span>
                 <span></span>
                 <span></span>
@@ -34,7 +38,7 @@
         </button>
 
         <!-- Status Display (Transcription/Réponse) -->
-        <div id="status-display" class="status-card">
+        <div id="status-display" class="status-card" role="status" aria-live="polite" aria-atomic="true">
             <p class="status-text">Prêt à écouter...</p>
         </div>
 

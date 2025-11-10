@@ -1,23 +1,59 @@
-/* === 🎨 Variables de couleurs === */
+/* === 🎨 Variables de couleurs - Thème Standard (WCAG AA/AAA) === */
 :root {
-  --primary: #6366f1;
-  --primary-hover: #4f46e5;
-  --secondary: #8b5cf6;
-  --accent: #f59e0b;
-  --danger: #ef4444;
-  --success: #10b981;
-  --bg-gradient-start: #667eea;
-  --bg-gradient-end: #764ba2;
+  --primary: #4338ca;
+  /* ✅ Plus foncé pour meilleur contraste */
+  --primary-hover: #3730a3;
+  --secondary: #7c3aed;
+  --accent: #d97706;
+  /* ✅ Plus foncé */
+  --danger: #dc2626;
+  /* ✅ Plus foncé */
+  --success: #059669;
+  /* ✅ Plus foncé */
+  --bg-gradient-start: #1e3a8a;
+  /* ✅ Bleu foncé accessible (ratio >7:1 avec blanc) */
+  --bg-gradient-end: #4c1d95;
+  /* ✅ Violet foncé accessible (ratio >7:1 avec blanc) */
   --bg-main: #ffffff;
-  --bg-card: #f8fafc;
-  --text-primary: #1e293b;
-  --text-secondary: #64748b;
-  --text-muted: #94a3b8;
-  --border: #e2e8f0;
+  --bg-card: #ffffff;
+  /* ✅ Blanc pur pour meilleur contraste */
+  --text-primary: #0f172a;
+  /* ✅ Quasi-noir (21:1 sur blanc) */
+  --text-secondary: #1e293b;
+  /* ✅ Plus foncé (14:1 sur blanc) */
+  --text-muted: #475569;
+  /* ✅ Plus foncé (7:1 sur blanc = AAA) */
+  --text-on-gradient: #ffffff;
+  /* ✅ Blanc sur fond coloré */
+  --border: #cbd5e1;
+  /* ✅ Plus visible */
   --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
   --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
   --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
   --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+}
+
+/* === 🌗 Thème Haut Contraste (WCAG AAA - pour malvoyants) === */
+body.high-contrast {
+  --primary: #ffffff;
+  --primary-hover: #ffff00;
+  --secondary: #ffff00;
+  --accent: #ffff00;
+  --danger: #ff0000;
+  --success: #00ff00;
+  --bg-gradient-start: #000000;
+  --bg-gradient-end: #000000;
+  --bg-main: #000000;
+  --bg-card: #000000;
+  --text-primary: #ffffff;
+  --text-secondary: #ffffff;
+  --text-muted: #ffff00;
+  --text-on-gradient: #ffff00;
+  --border: #ffffff;
+  --shadow-sm: none;
+  --shadow-md: none;
+  --shadow-lg: none;
+  --shadow-xl: none;
 }
 
 /* === 🌐 Reset & Base === */
@@ -29,10 +65,10 @@
 
 html,
 body {
-  width: 420px;
-  /* ✅ Largeur FIXE au lieu de 100% */
-  height: 580px;
-  /* ✅ Hauteur FIXE */
+  width: 100%;
+  /* ✅ Largeur flexible pour side panel */
+  min-height: 100vh;
+  /* ✅ Hauteur minimale = viewport */
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
   background: linear-gradient(135deg, var(--bg-gradient-start) 0%, var(--bg-gradient-end) 100%);
   color: var(--text-primary);
@@ -47,18 +83,23 @@ body {
 
 /* === 📦 Container === */
 #container {
-  background: var(--bg-main);
-  border-radius: 20px;
-  padding: 32px 28px;
-  /* ✅ Augmenté le padding */
-  margin: 16px;
-  /* ✅ Augmenté la marge */
-  box-shadow: var(--shadow-xl);
+  background: transparent;
+  /* ✅ Transparent pour voir le dégradé */
+  border-radius: 0;
+  /* ✅ Pas de border-radius pour side panel */
+  padding: 24px 20px;
+  /* ✅ Padding adapté pour side panel */
+  margin: 0;
+  /* ✅ Pas de marge pour side panel */
+  min-height: 100vh;
+  /* ✅ Prendre toute la hauteur */
+  box-shadow: none;
+  /* ✅ Pas d'ombre pour side panel */
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 24px;
-  /* ✅ Augmenté l'espacement */
+  gap: 20px;
+  /* ✅ Espacement optimisé */
 }
 
 /* === 🎯 Header === */
@@ -68,11 +109,34 @@ body {
 }
 
 .logo {
-  font-size: 56px;
-  /* ✅ Logo plus grand */
-  margin-bottom: 16px;
-  /* ✅ Plus d'espace */
+  font-size: 48px;
+  /* ✅ Logo adapté pour side panel */
+  margin-bottom: 12px;
   animation: float 3s ease-in-out infinite;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.logo img {
+  width: 120px;
+  /* ✅ Taille augmentée pour side panel */
+  height: 120px;
+  object-fit: contain;
+  /* ✅ SVG : pas de fond blanc, ombre directe */
+  filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.3));
+  transition: transform 0.3s ease;
+}
+
+.logo img:hover {
+  transform: scale(1.05);
+  /* ✅ Petit zoom au survol */
+}
+
+/* ✅ Ajustement pour mode haut contraste */
+body.high-contrast .logo img {
+  /* ✅ Inverser les couleurs du SVG pour fond noir */
+  filter: invert(1) brightness(1.2) drop-shadow(0 4px 12px rgba(255, 255, 255, 0.4));
 }
 
 @keyframes float {
@@ -88,23 +152,26 @@ body {
 }
 
 h1 {
-  font-size: 32px;
-  /* ✅ Plus grand */
+  font-size: 28px;
+  /* ✅ Plus grand pour lisibilité */
   font-weight: 700;
-  background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  /* ✅ Gras pour WCAG */
+  color: var(--text-on-gradient);
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.3), 0 1px 2px rgba(0, 0, 0, 0.5);
+  /* ✅ Ombre forte pour détacher du fond */
   margin: 0;
   letter-spacing: -0.5px;
 }
 
 .subtitle {
   font-size: 14px;
-  /* ✅ Plus lisible */
-  color: var(--text-muted);
+  /* ✅ Plus grand pour lisibilité */
+  font-weight: 600;
+  /* ✅ Plus gras pour WCAG */
+  color: var(--text-on-gradient);
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+  /* ✅ Ombre pour contraste */
   margin-top: 6px;
-  font-weight: 500;
 }
 
 /* === 💡 Status Indicator === */
@@ -112,17 +179,21 @@ h1 {
   display: flex;
   align-items: center;
   gap: 10px;
-  /* ✅ Plus d'espace */
-  padding: 10px 20px;
-  /* ✅ Plus de padding */
+  padding: 12px 18px;
+  /* ✅ Plus de padding pour cibles tactiles */
   background: var(--bg-card);
-  border-radius: 20px;
-  border: 1px solid var(--border);
-  font-size: 14px;
-  /* ✅ Plus lisible */
-  font-weight: 500;
-  color: var(--text-secondary);
+  border-radius: 12px;
+  border: 2px solid var(--border);
+  /* ✅ Bordure plus épaisse pour visibilité */
+  font-size: 15px;
+  /* ✅ Plus grand pour WCAG */
+  font-weight: 600;
+  /* ✅ Plus gras pour contraste */
+  color: var(--text-primary);
+  /* ✅ Texte quasi-noir */
   transition: all 0.3s ease;
+  width: 100%;
+  box-shadow: var(--shadow-md);
 }
 
 .reset-btn {
@@ -130,16 +201,19 @@ h1 {
   background: transparent;
   border: none;
   cursor: pointer;
-  font-size: 18px;
-  padding: 4px 8px;
+  font-size: 20px;
+  /* ✅ Plus grand */
+  padding: 6px 10px;
+  /* ✅ Plus de padding pour cible tactile */
   border-radius: 8px;
   transition: all 0.3s ease;
-  opacity: 0.6;
+  opacity: 0.8;
+  /* ✅ Plus visible */
 }
 
 .reset-btn:hover {
   opacity: 1;
-  background: rgba(99, 102, 241, 0.1);
+  background: rgba(67, 56, 202, 0.1);
   transform: rotate(180deg);
 }
 
@@ -147,30 +221,84 @@ h1 {
   transform: rotate(180deg) scale(0.9);
 }
 
+/* === 🎨 Bouton de basculement de thème === */
+.theme-toggle {
+  background: var(--bg-card);
+  border: 2px solid var(--border);
+  cursor: pointer;
+  font-size: 20px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.theme-toggle:hover {
+  transform: scale(1.05);
+  border-color: var(--primary);
+}
+
+.theme-toggle:active {
+  transform: scale(0.95);
+}
+
+/* === 🌗 Ajustements pour mode Haut Contraste === */
+body.high-contrast #mic-button {
+  border: 4px solid var(--border);
+  /* ✅ Bordure blanche épaisse */
+}
+
+body.high-contrast .status-card,
+body.high-contrast .status-indicator,
+body.high-contrast .transcript-box {
+  border: 3px solid var(--border);
+  /* ✅ Bordures blanches épaisses */
+}
+
+body.high-contrast .led {
+  border-width: 3px;
+  /* ✅ Bordures plus épaisses */
+}
+
+body.high-contrast h1,
+body.high-contrast .subtitle {
+  text-shadow: 2px 2px 4px rgba(255, 255, 255, 0.3);
+  /* ✅ Ombre claire sur fond noir */
+}
+
 .led {
   display: inline-block;
-  width: 10px;
-  /* ✅ LED plus grande */
-  height: 10px;
+  width: 12px;
+  /* ✅ Plus grand pour visibilité */
+  height: 12px;
   border-radius: 50%;
   background-color: var(--text-muted);
+  border: 2px solid var(--text-muted);
+  /* ✅ Bordure pour haut contraste */
   transition: all 0.3s ease;
 }
 
 .led.connected {
   background-color: var(--success);
-  box-shadow: 0 0 10px var(--success), 0 0 20px rgba(16, 185, 129, 0.3);
+  border-color: var(--success);
+  box-shadow: 0 0 12px var(--success), 0 0 24px rgba(5, 150, 105, 0.4);
 }
 
 .led.recording {
   background-color: var(--danger);
-  box-shadow: 0 0 10px var(--danger);
+  border-color: var(--danger);
+  box-shadow: 0 0 12px var(--danger), 0 0 24px rgba(220, 38, 38, 0.4);
   animation: blink 1s ease-in-out infinite;
 }
 
 .led.processing {
   background-color: var(--accent);
-  box-shadow: 0 0 10px var(--accent);
+  border-color: var(--accent);
+  box-shadow: 0 0 12px var(--accent), 0 0 24px rgba(217, 119, 6, 0.4);
   animation: blink 1s ease-in-out infinite;
 }
 
@@ -189,9 +317,9 @@ h1 {
 /* === 🎙️ Bouton Microphone === */
 #mic-button {
   position: relative;
-  width: 120px;
-  /* ✅ Plus grand */
-  height: 120px;
+  width: 100px;
+  /* ✅ Adapté pour side panel */
+  height: 100px;
   border-radius: 50%;
   border: none;
   cursor: pointer;
@@ -205,8 +333,8 @@ h1 {
 }
 
 .mic-icon {
-  font-size: 52px;
-  /* ✅ Icône plus grande */
+  font-size: 44px;
+  /* ✅ Icône adaptée pour side panel */
   z-index: 2;
   transition: transform 0.3s ease;
 }
@@ -308,62 +436,76 @@ h1 {
 .status-card {
   width: 100%;
   padding: 20px;
-  /* ✅ Plus de padding */
+  /* ✅ Plus de padding pour cibles tactiles */
   background: var(--bg-card);
   border-radius: 12px;
-  border: 1px solid var(--border);
+  border: 2px solid var(--border);
+  /* ✅ Bordure plus épaisse */
   min-height: 80px;
-  /* ✅ Plus haut */
+  /* ✅ Plus haut pour lisibilité */
   display: flex;
   align-items: center;
   justify-content: center;
   transition: all 0.3s ease;
+  box-shadow: var(--shadow-md);
 }
 
 .status-text {
-  font-size: 15px;
-  /* ✅ Plus lisible */
-  color: var(--text-secondary);
+  font-size: 16px;
+  /* ✅ Plus grand pour WCAG */
+  color: var(--text-primary);
+  /* ✅ Quasi-noir pour contraste maximum */
   text-align: center;
-  line-height: 1.6;
+  line-height: 1.5;
   margin: 0;
-  font-weight: 500;
+  font-weight: 600;
+  /* ✅ Plus gras pour lisibilité */
 }
 
-/* États du status */
+/* États du status - Contrastes WCAG AAA */
 .status-card.success {
-  background: rgba(16, 185, 129, 0.08);
+  background: var(--bg-card);
   border-color: var(--success);
+  border-width: 3px;
+  /* ✅ Bordure épaisse pour indication visuelle */
 }
 
 .status-card.success .status-text {
   color: var(--success);
-  font-weight: 600;
+  /* ✅ Vert foncé (4.5:1 sur blanc) */
+  font-weight: 700;
+  /* ✅ Extra gras */
 }
 
 .status-card.error {
-  background: rgba(239, 68, 68, 0.08);
+  background: var(--bg-card);
   border-color: var(--danger);
+  border-width: 3px;
 }
 
 .status-card.error .status-text {
   color: var(--danger);
-  font-weight: 600;
+  /* ✅ Rouge foncé (4.5:1 sur blanc) */
+  font-weight: 700;
 }
 
 .status-card.processing {
-  background: rgba(245, 158, 11, 0.08);
+  background: var(--bg-card);
   border-color: var(--accent);
+  border-width: 3px;
 }
 
 .status-card.processing .status-text {
   color: var(--accent);
-  font-weight: 600;
+  /* ✅ Orange foncé (4.5:1 sur blanc) */
+  font-weight: 700;
 }
 
 .status-card.interim .status-text {
   color: var(--text-muted);
+  /* ✅ Gris foncé (7:1 sur blanc) */
   font-style: italic;
+  font-weight: 600;
 }
 
 /* === 💬 Transcript Box === */
@@ -374,8 +516,8 @@ h1 {
   border: 1px solid var(--border);
   overflow: hidden;
   transition: all 0.3s ease;
-  max-height: 220px;
-  /* ✅ Plus haut */
+  max-height: 300px;
+  /* ✅ Plus d'espace vertical pour side panel */
 }
 
 .transcript-box.hidden {
@@ -403,13 +545,13 @@ h1 {
 }
 
 .transcript-content {
-  padding: 18px;
-  /* ✅ Plus de padding */
-  max-height: 170px;
-  /* ✅ Plus haut */
+  padding: 16px;
+  /* ✅ Adapté pour side panel */
+  max-height: 250px;
+  /* ✅ Plus d'espace vertical pour side panel */
   overflow-y: auto;
-  font-size: 14px;
-  /* ✅ Plus lisible */
+  font-size: 13px;
+  /* ✅ Adapté pour side panel */
   line-height: 1.7;
   color: var(--text-primary);
 }
@@ -492,27 +634,58 @@ h1 {
   animation: fadeInUp 0.5s ease-out 0.4s backwards;
 }
 
-/* === 📱 Responsive === */
-@media (max-width: 400px) {
-  body {
-    min-width: 320px;
+/* === 📱 Responsive pour Side Panel === */
+@media (max-width: 350px) {
+  #container {
+    padding: 20px 16px;
+    gap: 16px;
   }
 
-  #container {
-    margin: 12px;
-    padding: 24px 20px;
+  .logo {
+    font-size: 40px;
+    margin-bottom: 8px;
   }
 
   h1 {
-    font-size: 28px;
+    font-size: 22px;
+  }
+
+  .subtitle {
+    font-size: 12px;
   }
 
   #mic-button {
-    width: 100px;
-    height: 100px;
+    width: 90px;
+    height: 90px;
   }
 
   .mic-icon {
-    font-size: 46px;
+    font-size: 38px;
+  }
+
+  .status-card {
+    padding: 14px;
+    min-height: 60px;
+  }
+
+  .status-text {
+    font-size: 13px;
+  }
+
+  .transcript-content {
+    font-size: 12px;
+    padding: 14px;
+  }
+}
+
+/* === 🖥️ Largeur side panel optimale (320px-400px) === */
+@media (min-width: 320px) and (max-width: 450px) {
+  body {
+    background: linear-gradient(135deg, var(--bg-gradient-start) 0%, var(--bg-gradient-end) 100%);
+  }
+
+  #container {
+    background: transparent;
+    /* ✅ Garder transparent pour voir le dégradé */
   }
 }

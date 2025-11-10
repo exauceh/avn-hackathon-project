@@ -1,0 +1,42 @@
+FLUX DE L'ÉCOUTE UNIQUE CONTINUE
+=====================================
+
+ÉTATS DU SYSTÈME:
+- hotword: Attente du mot-clé "hello"
+- active: Écoute active des commandes utilisateur
+- interruption: TTS en cours, interruption possible
+- confirmation: Attente de confirmation utilisateur
+
+ÉCOUTE UNIQUE:
+- Une seule instance de webkitSpeechRecognition
+- Toujours active (continuous: true, interimResults: true)
+- Se redémarre automatiquement en cas d'erreur
+- Change de mode selon le contexte
+
+INTERRUPTION TTS:
+- Dès que l'utilisateur parle (onspeechstart)
+- Arrêt immédiat du TTS avec fade-out rapide
+- Feedback "hum" immédiat
+- Passage automatique en mode "active"
+
+FLUX:
+1. Démarrage → Mode "hotword"
+2. Détection "hello" → Mode "active" + "hum"
+3. Commande utilisateur → Envoi au serveur
+4. TTS démarre → Mode "interruption" (si can_interrupt)
+5. Utilisateur parle → Arrêt TTS + "hum" + Mode "active"
+6. Nouvelle commande → Reprise du flux
+
+AMÉLIORATIONS:
+- Feedback audio instantané ("hum" dès la parole détectée)
+- Fade-out rapide du TTS (150ms au lieu de blocage brutal)
+- Résultats intermédiaires affichés dans l'UI
+- Débounce des commandes (1 seconde minimum)
+- Gestion de l'inactivité intelligente
+- Pas de multiples instances de reconnaissance
+
+FICHIERS MODIFIÉS:
+- popup-stt.js: Écoute unique globale
+- popup.js: UI mise à jour avec nouveaux états
+- background.js: Gestion synchronisée du TTS
+- offscreen.js: Fade-out pour interruptions douces

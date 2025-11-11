@@ -180,7 +180,7 @@ class ReadingAgent:
         first_chunk = chunks[0] if chunks else ""
         
         state["response_text"] = (
-            f"{chunks[0]}"
+            f"{chunks[:10]}"
         )
         
         state["action"] = {
@@ -210,10 +210,11 @@ class ReadingAgent:
         """
         
         # Limiter la taille du contenu envoyé au LLM
-        max_input_length = 60000  # ~3500 tokens
+        max_input_length = 150000  # ~3500 tokens
         truncated_content = raw_content[:max_input_length]
         
-        system_prompt = """You are a content extraction and formatting specialist.
+        system_prompt = """ You are AVN, a voice assistant for visually impaired people.
+        You are a content extraction and formatting specialist.
         Your task is to extract and format article content based on user's reading intention.
 
         USER INTENTIONS TO DETECT:
@@ -240,13 +241,13 @@ class ReadingAgent:
         
         OUTPUT FORMAT:
         - Start with the article title (if full article requested)
-        - Include section headings only if needed for context
+        - Include section headings, the page overview only if needed for context
         - Keep paragraphs intact
         - Maintain natural flow for voice reading
-        - Use simple punctuation for better TTS
+        - Use simple punctuation for better TTS (no asterix)
         - For partial reads, indicate what section is being read
 
-        Return ONLY the cleaned content matching the user's intention, ready to be read aloud."""
+        Return ONLY the cleaned content matching the user's intention, ready to be read aloud. Be concise if necessary"""
         
         user_prompt = f"""Page Title: {page_title}
 
@@ -394,7 +395,12 @@ class ReadingAgent:
             'illustration', 'figure', 'visual', 'show me'
         ]
         
-        action_keywords = ['describe', 'explain', 'tell me about', 'what is', 'what does']
+        action_keywords = [
+            'describe', 'explain', 'tell me about', 'what is', 'what does',
+            'show me', 'details', 'more about', 'information about',
+            'can you explain', 'what\'s in', 'analyze', 'break down',
+            'look at', 'see', 'view', 'check', 'examine', 'inspect',"say"
+        ]
         
         message_lower = message.lower()
         

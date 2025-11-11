@@ -148,6 +148,8 @@ class AVNGraphAgent:
           * Reading control (e.g., "continue reading", "resume", "read more", "keep going", "next paragraph")
           * Asking questions about current content (e.g., "who wrote this?", "when was this published?", "tell me about...")
           * Follow-up questions about previously discussed content
+          * Image analysis (e.g., "describe this image", "what's in the picture", "analyze this photo", "what does the image show")
+          * Visual content questions (e.g., "what color is it", "how many people are in the image", "read the text in the image")
         - RESPONSE: For general questions, confirmations, greetings, or requests that don't fit the above categories
 
         IMPORTANT - Context awareness:
@@ -155,6 +157,7 @@ class AVNGraphAgent:
         - If previous messages show search results or navigation to a page, and the user asks questions, it's likely READING
         - If the conversation shows the user was reading something and they say "continue" or ask question about the content, use READING
         - Use conversation history to disambiguate vague requests like "open it", "read that", "tell me more"
+        - If the user asks about images, photos, pictures, or visual content, route to READING for image analysis
 
         Respond ONLY with one of these words: SEARCH, NAVIGATION, FORM, READING, or RESPONSE
         """

@@ -165,19 +165,25 @@ class ImageAnalyzer:
         """Générer le prompt approprié selon le mode"""
         
         if mode == "brief":
-            return """Describe this image in ONE SENTENCE suitable for screen readers.
-Be concise and factual. Focus on what is visually important.
-Format: Start with "Image:" followed by the description.
-Example: "Image: A diagram showing the structure of a neuron with labeled parts."
-"""
+            return """        
+        You are AVN, a voice assistant for visually impaired people.
+            Describe this image in ONE SENTENCE suitable for screen readers.
+        
+        Be concise and factual. Focus on what is visually important.
+        Format: Start with "Image:" followed by the description.
+        Use simple ponctuations for better TTS (no asterix)
+        Example: "Image: A diagram showing the structure of a neuron with labeled parts."
+        """
         
         elif mode == "detailed":
-            prompt = """Describe this image in detail for a visually impaired person.
+            prompt = """  You are AVN, a voice assistant for visually impaired people.
+            Describe this image in detail for a visually impaired person.
 Include:
 - What type of image it is (photo, diagram, chart, etc.)
 - Main subjects and their arrangement
 - Important details, colors, or text visible
 - Any data or information conveyed
+- Use simple ponctuations for better TTS (no asterix)
 
 Be clear and organized. Maximum 5 sentences."""
             

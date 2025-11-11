@@ -44,12 +44,6 @@ class ReadingAgent:
         if self.reading_state['is_reading']:
             print(f"📖 Position: {self.reading_state['current_position']}/{len(self.reading_state['content_chunks'])} chunks")
         
-        # ✅ DETECT IMAGE DESCRIPTION REQUEST FIRST (high priority)
-        if self._is_image_description_request(last_message):
-            print(f"🖼️ Image description request detected")
-            print("="*60)
-            return self._handle_image_description_request(state)
-        
         # ✅ DETECT INTERRUPTION (clarification questions)
         if self._is_clarification_request(last_message, state):
             print(f"🛑 Interruption detected → Processing clarification")
@@ -111,8 +105,9 @@ class ReadingAgent:
         print(f"📖 Starting reading: {page_title}")
         print(last_message)
         
-        # ✅ Extract ALL content from the page
+        # ✅ Extract ALL content from the page (text + images)
         raw_content = self._extract_all_page_content(page_content)
+        images = page_content.get("images", [])
         
         if not raw_content:
             state["response_text"] = (
@@ -123,38 +118,18 @@ class ReadingAgent:
             state["needs_confirmation"] = False
             return state
         
-        # ✅ Extraire et analyser les images
-        images = page_content.get("images", [])
-        enriched_images = []
-        
-        if images:
-            print(f"🖼️ Found {len(images)} images, analyzing...")
-            try:
-                # Analyser les images en mode brief pour l'intégration dans le flux
-                enriched_images = self.image_analyzer.analyze_multiple_images(
-                    images,
-                    mode="brief",
-                    context=raw_content[:1000]  # Contexte limité
-                )
-                print(f"✨ {len(enriched_images)} images analyzed successfully")
-            except Exception as e:
-                print(f"⚠️ Error analyzing images: {e}")
-                enriched_images = images  # Garder les images brutes
-        
-        # ✅ UTILISER LE LLM POUR NETTOYER ET STRUCTURER LE CONTENU
-        print(f"🤖 Using LLM to clean and structure content...")
-        cleaned_content = self._clean_content_with_llm(raw_content, page_title, last_message)
+        # ✅ Nettoyer le contenu ET intégrer les images de manière intelligente
+        print(f"🤖 Using LLM to clean content and integrate {len(images)} images...")
+        cleaned_content = self._clean_content_with_llm(
+            raw_content, 
+            page_title, 
+            last_message,
+            images  # Passer les images au LLM
+        )
         
         if not cleaned_content or len(cleaned_content) < 50:
             print(f"⚠️ Cleaned content too short, using raw content")
             cleaned_content = raw_content
-        
-        # ✅ Intégrer les descriptions d'images dans le contenu
-        if enriched_images:
-            cleaned_content = self._integrate_images_in_content(
-                cleaned_content,
-                enriched_images
-            )
         
         # Split content into readable chunks
         chunks = self._split_into_chunks(cleaned_content, chunk_size=500)
@@ -166,7 +141,7 @@ class ReadingAgent:
             "article_title": page_title,
             "current_position": 0,
             "content_chunks": chunks,
-            "images": enriched_images,  # ✅ Stocker les images pour référence ultérieure
+            "images": images,  # ✅ Stocker les images pour référence ultérieure
             "paused": False
         }
         
@@ -196,67 +171,84 @@ class ReadingAgent:
         
         return state
     
-    def _clean_content_with_llm(self, raw_content: str, page_title: str,user_message:str) -> str:
+    def _clean_content_with_llm(
+        self, 
+        raw_content: str, 
+        page_title: str,
+        user_message: str,
+        images: List[Dict[str, Any]] = None
+    ) -> str:
         """
-        Use LLM to extract and structure only the main article content.
-        Remove navigation, ads, menus, etc.
+        Use LLM to extract, structure, and integrate images intelligently.
         
         Args:
             raw_content: Raw extracted content from page
             page_title: Page title for context
+            user_message: User's request
+            images: List of images with metadata (url, alt, caption, etc.)
             
         Returns:
-            Cleaned and structured content ready for reading
+            Cleaned content with integrated image descriptions
         """
         
         # Limiter la taille du contenu envoyé au LLM
-        max_input_length = 150000  # ~3500 tokens
+        max_input_length = 150000
         truncated_content = raw_content[:max_input_length]
         
-        system_prompt = """ You are AVN, a voice assistant for visually impaired people.
-        You are a content extraction and formatting specialist.
-        Your task is to extract and format article content based on user's reading intention.
-
-        USER INTENTIONS TO DETECT:
-        - "read the first paragraph" / "read introduction" → Extract only opening paragraphs
-        - "read the full article" / "read everything" → Extract complete article
-        - "read the summary" / "give me overview" → Extract key points and summaries
-        - "read about [topic]" → Extract sections mentioning that specific topic
-        - "read the conclusion" → Extract final paragraphs/conclusion
-
-        REMOVE:
-        - Navigation menus, headers, footers
-        - Sidebars, ads, promotions
-        - Comments sections
-        - Related articles, recommendations
-        - UI elements (buttons, forms, login prompts)
-        - Social media sharing buttons
-        - Cookie notices, popups
-
-        KEEP:
-        - Article title and relevant headings
-        - Content matching user's intention
-        - Important lists and quotes if relevant
-        - Natural paragraph breaks
+        # Préparer les informations sur les images disponibles
+        images_info = ""
+        if images and len(images) > 0:
+            images_info = "\n\n📸 AVAILABLE IMAGES ON THE PAGE:\n"
+            for i, img in enumerate(images[:10], 1):  # Limiter à 10 images
+                alt = img.get('alt', 'No alt text')
+                caption = img.get('caption', '')
+                url = img.get('url', '')[:80]
+                
+                images_info += f"\n[Image {i}]"
+                if alt:
+                    images_info += f"\n  Alt text: {alt}"
+                if caption:
+                    images_info += f"\n  Caption: {caption}"
+                images_info += f"\n  URL: {url}\n"
         
-        OUTPUT FORMAT:
-        - Start with the article title (if full article requested)
-        - Include section headings, the page overview only if needed for context
-        - Keep paragraphs intact
-        - Maintain natural flow for voice reading
-        - Use simple punctuation for better TTS (no asterix)
-        - For partial reads, indicate what section is being read
+        system_prompt = """You are AVN, a voice assistant for visually impaired people.
+Your task is to extract, clean, and format article content with INTELLIGENT IMAGE INTEGRATION.
 
-        Return ONLY the cleaned content matching the user's intention, ready to be read aloud. Be concise if necessary"""
+USER INTENTIONS:
+- "read the first paragraph" / "read introduction" → Extract opening + relevant images
+- "read the full article" → Complete article + ALL relevant images
+- "read the summary" → Key points + important visuals
+- "read about [topic]" → Sections on topic + related images
+- "read the conclusion" → Final paragraphs only
+
+IMAGE INTEGRATION RULES:
+1. **Analyze each image's relevance** based on alt text, caption, and context
+2. **Insert placeholders** for relevant images: [IMAGE:1], [IMAGE:2], etc.
+3. **Skip decorative/irrelevant** images (logos, icons, ads, UI elements)
+4. **Position wisely**: After introducing a concept the image illustrates
+5. Use the image NUMBER from the "AVAILABLE IMAGES" list (e.g., [IMAGE:3])
+
+FORMATTING FOR VOICE:
+- Use simple punctuation (no asterisks, markdown)
+- Natural flow for Text-to-Speech
+- Paragraph breaks for pacing
+- Insert [IMAGE:N] placeholders where relevant
+
+CLEANING:
+- Remove: navigation, ads, comments, UI elements, unrelated content
+- Keep: article text, headings, image placeholders
+
+OUTPUT: Clean text with [IMAGE:N] placeholders that will be replaced with actual descriptions."""
         
         user_prompt = f"""Page Title: {page_title}
+User Request: {user_message}
 
-        Content to clean:
-        {truncated_content}
+ARTICLE CONTENT:
+{truncated_content}
 
-        User message: {user_message}
+{images_info}
 
-        Extract and return ONLY the cleaned content matching the user's intention in a format suitable for voice reading."""
+TASK: Extract the content matching the user's intention and integrate ONLY relevant image descriptions naturally in the text flow. Use format "Image: [brief description]" when inserting images."""
                 
         try:
             messages = [
@@ -272,12 +264,94 @@ class ReadingAgent:
             print(f"   - Output: {len(cleaned)} chars")
             print(f"   - Preview: {cleaned[:150]}...")
             
+            # ✅ Post-processing: Replace [IMAGE:N] placeholders with actual descriptions
+            cleaned = self._replace_image_placeholders(cleaned, images, truncated_content)
+            
             return cleaned
             
         except Exception as e:
             print(f"❌ Error cleaning content with LLM: {e}")
             print(f"⚠️ Falling back to raw content")
             return raw_content
+    
+    def _replace_image_placeholders(
+        self,
+        cleaned_text: str,
+        images: List[Dict[str, Any]],
+        article_context: str
+    ) -> str:
+        """
+        Replace [IMAGE:N] placeholders with actual image descriptions.
+        
+        Args:
+            cleaned_text: Text with [IMAGE:N] placeholders
+            images: List of available images
+            article_context: Article content for context
+            
+        Returns:
+            Text with placeholders replaced by descriptions
+        """
+        
+        import re
+        
+        # Trouver tous les placeholders [IMAGE:N]
+        pattern = r'\[IMAGE:(\d+)\]'
+        matches = re.finditer(pattern, cleaned_text)
+        
+        replacements = {}
+        
+        for match in matches:
+            placeholder = match.group(0)  # e.g., [IMAGE:1]
+            image_num = int(match.group(1))  # e.g., 1
+            
+            # Convertir en index 0-based
+            image_index = image_num - 1
+            
+            if 0 <= image_index < len(images):
+                image = images[image_index]
+                
+                # Vérifier si l'image doit être décrite
+                if self.image_analyzer.should_describe_image(image):
+                    try:
+                        print(f"🖼️ Analyzing image {image_num}: {image.get('url', '')[:50]}...")
+                        
+                        # Analyser l'image avec le contexte
+                        description = self.image_analyzer.analyze_image(
+                            image_url=image["url"],
+                            mode="contextual",  # Mode contextuel pour une description pertinente
+                            context=article_context[:1000],  # Limiter le contexte
+                            alt_text=image.get("alt", "")
+                        )
+                        
+                        # Format: "Image: [description]"
+                        replacements[placeholder] = f"Image: {description}"
+                        
+                    except Exception as e:
+                        print(f"⚠️ Error analyzing image {image_num}: {e}")
+                        # Fallback sur alt text
+                        alt_text = image.get("alt", "")
+                        if alt_text:
+                            replacements[placeholder] = f"Image: {alt_text}"
+                        else:
+                            replacements[placeholder] = ""
+                else:
+                    print(f"⏭️ Skipping image {image_num} (decorative or too small)")
+                    replacements[placeholder] = ""
+            else:
+                print(f"⚠️ Image {image_num} not found (only {len(images)} images available)")
+                replacements[placeholder] = ""
+        
+        # Remplacer tous les placeholders
+        result = cleaned_text
+        for placeholder, replacement in replacements.items():
+            result = result.replace(placeholder, replacement)
+        
+        # Nettoyer les doubles espaces
+        result = re.sub(r'\n\n\n+', '\n\n', result)
+        
+        print(f"✅ Replaced {len(replacements)} image placeholders")
+        
+        return result
     
     def _extract_all_page_content(self, page_content: Dict[str, Any]) -> str:
         """
@@ -325,180 +399,6 @@ class ReadingAgent:
         print(f"📄 Content preview: {full_content[:200]}...")
         
         return full_content
-    
-    def _integrate_images_in_content(
-        self,
-        text_content: str,
-        images: List[Dict[str, Any]]
-    ) -> str:
-        """
-        Intégrer les descriptions d'images dans le contenu textuel
-        
-        Args:
-            text_content: Contenu textuel nettoyé
-            images: Liste des images avec leurs descriptions
-        
-        Returns:
-            Contenu avec images intégrées de manière naturelle
-        """
-        
-        if not images:
-            return text_content
-        
-        # Diviser le contenu en paragraphes
-        paragraphs = text_content.split('\n\n')
-        
-        # Calculer où insérer les images (répartition équitable)
-        total_paragraphs = len(paragraphs)
-        total_images = len(images)
-        
-        if total_images == 0:
-            return text_content
-        
-        # Insérer une image tous les N paragraphes
-        insert_interval = max(total_paragraphs // (total_images + 1), 1)
-        
-        result_parts = []
-        image_index = 0
-        
-        for i, paragraph in enumerate(paragraphs):
-            result_parts.append(paragraph)
-            
-            # Insérer une image selon l'intervalle
-            if (i + 1) % insert_interval == 0 and image_index < total_images:
-                image = images[image_index]
-                
-                # Vérifier si l'image doit être décrite
-                if self.image_analyzer.should_describe_image(image):
-                    description = image.get("description", "")
-                    if description:
-                        result_parts.append(f"\n{description}\n")
-                
-                image_index += 1
-        
-        # Ajouter les images restantes à la fin
-        while image_index < total_images:
-            image = images[image_index]
-            if self.image_analyzer.should_describe_image(image):
-                description = image.get("description", "")
-                if description:
-                    result_parts.append(f"\n{description}\n")
-            image_index += 1
-        
-        return "\n\n".join(result_parts)
-    
-    def _is_image_description_request(self, message: str) -> bool:
-        """Détecter si l'utilisateur demande une description d'image"""
-        
-        image_keywords = [
-            'image', 'picture', 'photo', 'diagram', 'chart', 'graph',
-            'illustration', 'figure', 'visual', 'show me'
-        ]
-        
-        action_keywords = [
-            'describe', 'explain', 'tell me about', 'what is', 'what does',
-            'show me', 'details', 'more about', 'information about',
-            'can you explain', 'what\'s in', 'analyze', 'break down',
-            'look at', 'see', 'view', 'check', 'examine', 'inspect',"say"
-        ]
-        
-        message_lower = message.lower()
-        
-        has_image_keyword = any(keyword in message_lower for keyword in image_keywords)
-        has_action_keyword = any(keyword in message_lower for keyword in action_keywords)
-        
-        return has_image_keyword and has_action_keyword
-    
-    def _handle_image_description_request(self, state: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Gérer une demande de description d'image détaillée
-        
-        Exemples:
-        - "Describe the image"
-        - "Tell me more about the diagram"
-        - "What does the chart show?"
-        """
-        
-        last_message = state["messages"][-1].content
-        
-        # Trouver l'image la plus récente
-        if not self.reading_state.get("images"):
-            state["response_text"] = "There are no images in this article."
-            state["action"] = {"type": "info"}
-            return state
-        
-        # Use LLM to determine which image the user is referring to
-        images = self.reading_state["images"]
-        
-        print(f"🖼️ Using LLM to identify requested image from {len(images)} available images...")
-        
-        try:
-            # Create a context of available images for the LLM
-            images_context = "\n".join([
-            f"{i+1}. {img.get('alt', 'Image')} - {img.get('description', 'No description')[:100]}"
-            for i, img in enumerate(images)
-            ])
-            
-            system_prompt = """You are helping identify which image a user is asking about.
-            Based on the user's request and the available images, return ONLY the number (1-based index) of the most relevant image.
-            Return only a single number, nothing else."""
-            
-            user_prompt = f"""User request: {last_message}
-
-    Available images:
-    {images_context}
-
-    Which image number is the user asking about? Return only the number."""
-            
-            messages = [
-            SystemMessage(content=system_prompt),
-            HumanMessage(content=user_prompt)
-            ]
-            
-            response = self.llm.invoke(messages)
-            image_index = int(response.content.strip()) - 1  # Convert to 0-based index
-            
-            # Validate index
-            if image_index < 0 or image_index >= len(images):
-                print(f"⚠️ Invalid index {image_index}, defaulting to first image")
-            image_index = 0
-            
-            image = images[image_index]
-            print(f"✅ Selected image {image_index + 1}: {image.get('url', '')[:50]}...")
-            
-        except Exception as e:
-            print(f"⚠️ Error identifying image: {e}, defaulting to first image")
-            image = images[0]
-        
-        print(f"🖼️ Generating detailed description for image: {image.get('url', '')[:50]}...")
-        
-        try:
-            # Generate detailed description
-            context = " ".join(self.reading_state["content_chunks"][:2])
-            
-            detailed_description = self.image_analyzer.analyze_image(
-            image_url=image["url"],
-            mode="detailed",
-            context=context,
-            alt_text=image.get("alt", "")
-            )
-            
-            state["response_text"] = detailed_description
-            
-        except Exception as e:
-            print(f"❌ Error generating detailed description: {e}")
-            # Fallback sur la description brève
-            state["response_text"] = image.get("description", "Image description unavailable")
-        
-        state["action"] = {
-            "type": "image_description",
-            "image_url": image["url"],
-            "is_reading_action": True  # Permettre la reprise
-        }
-        
-        state["needs_confirmation"] = False
-        
-        return state
     
     def _split_into_chunks(self, text: str, chunk_size: int = 500) -> List[str]:
         """

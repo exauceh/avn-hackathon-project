@@ -89,8 +89,10 @@ class ReadingAgent:
             return False
         
         # 2. Détecter les mots-clés de question (logique simple)
-        question_keywords = ['what', 'who', 'why', 'how', 'when', 'where', 
-                            'what is', 'explain', 'tell me', 'define', 'describe']
+        question_keywords = ['what', 'who', 'why', "which",'how', 'when', 'where', 
+                    'what is', 'explain', 'tell me', 'define', 'describe',
+                    'can you', 'could you', 'would you', 'do you', 'does',
+                    'is it', 'are there', 'meaning', 'mean', 'clarify']
         
         is_question = any(keyword in message for keyword in question_keywords)
         

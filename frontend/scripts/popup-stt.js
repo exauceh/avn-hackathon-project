@@ -68,7 +68,7 @@ loadPreferredVoice();
 function speakMessage(text, isSleepMessage = false) {
     try {
         const utterance = new SpeechSynthesisUtterance(text);
-        
+
         // Utiliser la voix préférée si elle est chargée
         if (preferredVoice) {
             utterance.voice = preferredVoice;
@@ -85,7 +85,7 @@ function speakMessage(text, isSleepMessage = false) {
             utterance.pitch = 1.0;
             utterance.volume = 0.7;
         }
-        
+
         window.speechSynthesis.speak(utterance);
     } catch (e) {
         console.warn('speakMessage failed', e);
@@ -260,7 +260,7 @@ function initializeGlobalRecognition() {
             console.log(`⏳ Inactivité: ${inactivityCount}/${MAX_INACTIVITY}`);
 
             if (inactivityCount >= MAX_INACTIVITY) {
-                speakMessage('Going back to sleep. Say hello to wake me up.',isSleepMessage=True);
+                speakMessage('Going back to sleep. Say hello to wake me up.', true);
                 currentMode = 'hotword';
                 inactivityCount = 0;
                 notifyRecordingState();

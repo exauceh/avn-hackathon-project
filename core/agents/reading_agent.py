@@ -180,7 +180,7 @@ class ReadingAgent:
         first_chunk = chunks[0] if chunks else ""
         
         state["response_text"] = (
-            f"{chunks[:10]}"
+            f"{chunks[:5]}"
         )
         
         state["action"] = {
@@ -427,20 +427,60 @@ class ReadingAgent:
             state["action"] = {"type": "info"}
             return state
         
-        # Pour l'instant, décrire la dernière image mentionnée ou la première
-        image = self.reading_state["images"][0]
+        # Use LLM to determine which image the user is referring to
+        images = self.reading_state["images"]
+        
+        print(f"🖼️ Using LLM to identify requested image from {len(images)} available images...")
+        
+        try:
+            # Create a context of available images for the LLM
+            images_context = "\n".join([
+            f"{i+1}. {img.get('alt', 'Image')} - {img.get('description', 'No description')[:100]}"
+            for i, img in enumerate(images)
+            ])
+            
+            system_prompt = """You are helping identify which image a user is asking about.
+            Based on the user's request and the available images, return ONLY the number (1-based index) of the most relevant image.
+            Return only a single number, nothing else."""
+            
+            user_prompt = f"""User request: {last_message}
+
+    Available images:
+    {images_context}
+
+    Which image number is the user asking about? Return only the number."""
+            
+            messages = [
+            SystemMessage(content=system_prompt),
+            HumanMessage(content=user_prompt)
+            ]
+            
+            response = self.llm.invoke(messages)
+            image_index = int(response.content.strip()) - 1  # Convert to 0-based index
+            
+            # Validate index
+            if image_index < 0 or image_index >= len(images):
+                print(f"⚠️ Invalid index {image_index}, defaulting to first image")
+            image_index = 0
+            
+            image = images[image_index]
+            print(f"✅ Selected image {image_index + 1}: {image.get('url', '')[:50]}...")
+            
+        except Exception as e:
+            print(f"⚠️ Error identifying image: {e}, defaulting to first image")
+            image = images[0]
         
         print(f"🖼️ Generating detailed description for image: {image.get('url', '')[:50]}...")
         
         try:
-            # Générer une description détaillée
+            # Generate detailed description
             context = " ".join(self.reading_state["content_chunks"][:2])
             
             detailed_description = self.image_analyzer.analyze_image(
-                image_url=image["url"],
-                mode="detailed",
-                context=context,
-                alt_text=image.get("alt", "")
+            image_url=image["url"],
+            mode="detailed",
+            context=context,
+            alt_text=image.get("alt", "")
             )
             
             state["response_text"] = detailed_description

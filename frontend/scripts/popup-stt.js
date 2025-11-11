@@ -18,24 +18,74 @@ const MIN_COMMAND_INTERVAL = 1000;
 const MIN_SPEECH_DURATION = 800; // ✅ Durée minimale de parole pour éviter les bruits (ms)
 const MIN_CONFIDENCE = 0.6; // ✅ Confiance minimale pour une vraie parole
 
+// Créez l'objet audio une seule fois pour de meilleures performances
+const humSound = new Audio(chrome.runtime.getURL('assets/hum.mp3'));
+humSound.volume = 0.5; // Vous pouvez toujours contrôler le volume
+
 function playHumSound() {
     try {
-        const utterance = new SpeechSynthesisUtterance('hum');
-        utterance.rate = 1.2;
-        utterance.pitch = 0.8;
-        utterance.volume = 0.5;
-        window.speechSynthesis.speak(utterance);
+        // Il suffit de jouer le son
+        humSound.play();
     } catch (e) {
         console.warn('playHumSound failed', e);
     }
 }
 
-function speakMessage(text) {
+// Variable globale pour stocker la voix une fois qu'elle est prête
+let preferredVoice = null;
+
+// Function to load the preferred voice
+function loadPreferredVoice() {
+    return new Promise(resolve => {
+        const setVoice = () => {
+            const voices = window.speechSynthesis.getVoices();
+            // Try to find a natural-sounding English voice
+            // Names may vary depending on the operating system and browser
+            preferredVoice = voices.find(voice => voice.lang === 'en-US' && voice.name.includes('Google') && !voice.name.includes('male'));
+            if (!preferredVoice) {
+                preferredVoice = voices.find(voice => voice.lang === 'en-US');
+            }
+            if (preferredVoice) {
+                console.log('Preferred voice loaded:', preferredVoice.name);
+            } else {
+                console.warn('No en-US voice found, using default voice.');
+            }
+            resolve(preferredVoice);
+        };
+
+        if (window.speechSynthesis.getVoices().length === 0) {
+            window.speechSynthesis.onvoiceschanged = setVoice;
+        } else {
+            setVoice();
+        }
+    });
+}
+
+// Charger la voix dès que possible
+loadPreferredVoice();
+
+
+function speakMessage(text, isSleepMessage = false) {
     try {
         const utterance = new SpeechSynthesisUtterance(text);
-        utterance.rate = 1.0;
-        utterance.pitch = 1.0;
-        utterance.volume = 0.7;
+        
+        // Utiliser la voix préférée si elle est chargée
+        if (preferredVoice) {
+            utterance.voice = preferredVoice;
+        }
+
+        if (isSleepMessage) {
+            // Réglages pour simuler un ton plus calme et "endormi"
+            utterance.rate = 0.85; // Un peu plus lent
+            utterance.pitch = 0.8; // Un peu plus grave/calme
+            utterance.volume = 0.6; // Un peu plus doux
+        } else {
+            // Réglages par défaut pour les autres messages
+            utterance.rate = 1.0;
+            utterance.pitch = 1.0;
+            utterance.volume = 0.7;
+        }
+        
         window.speechSynthesis.speak(utterance);
     } catch (e) {
         console.warn('speakMessage failed', e);
@@ -210,7 +260,7 @@ function initializeGlobalRecognition() {
             console.log(`⏳ Inactivité: ${inactivityCount}/${MAX_INACTIVITY}`);
 
             if (inactivityCount >= MAX_INACTIVITY) {
-                speakMessage('Going back to sleep. Say hello to wake me up.');
+                speakMessage('Going back to sleep. Say hello to wake me up.',isSleepMessage=True);
                 currentMode = 'hotword';
                 inactivityCount = 0;
                 notifyRecordingState();

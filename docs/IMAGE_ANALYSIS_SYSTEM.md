@@ -2,27 +2,29 @@
 
 ## Vue d'ensemble
 
-Le système d'analyse d'images permet aux utilisateurs malvoyants d'accéder au contenu visuel des pages web via des descriptions audio générées par IA.
+Le système d'analyse d'images permet aux utilisateurs malvoyants d'accéder au contenu visuel des pages web via des descriptions audio générées par IA **de manière intelligente et contextuelle**.
+
+⚠️ **Changement Important** : Le système n'analyse plus TOUTES les images automatiquement. Le LLM décide intelligemment quelles images sont pertinentes en fonction de la demande de l'utilisateur.
 
 ---
 
 ## 🎯 Objectifs
 
-1. **Accessibilité Totale** : Aucun contenu visuel ne doit être inaccessible
-2. **Intégration Naturelle** : Les descriptions s'intègrent dans le flux de lecture
-3. **Contrôle Utilisateur** : Possibilité d'approfondir sur demande
-4. **Performance** : Cache et optimisations pour éviter les appels API répétés
+1. **Accessibilité Intelligente** : Les images pertinentes sont décrites, pas les logos/icônes
+2. **Intégration Naturelle** : Les descriptions s'intègrent exactement où elles sont visuellement
+3. **Efficacité** : Analyse seulement les images nécessaires (économie de temps et ressources)
+4. **Contextualité** : Les descriptions s'adaptent au contenu et à la demande de l'utilisateur
 
 ---
 
-## 🏗️ Architecture
+## 🏗️ Architecture (Nouvelle Approche)
 
 ### Composants
 
 #### 1. **Frontend (`content.js`)**
-- **Extraction des images** : Détecte et extrait les images significatives de la page
-- **Filtrage intelligent** : Ignore les icônes, logos, et petites images
-- **Métadonnées** : Capture alt text, caption, dimensions, position
+- **Extraction des images** : Détecte et extrait TOUTES les images avec leurs métadonnées
+- **Filtrage basique** : Ignore seulement les images < 100x100 pixels
+- **Pas d'analyse** : Envoie uniquement les métadonnées au backend
 
 ```javascript
 {
@@ -30,26 +32,54 @@ Le système d'analyse d'images permet aux utilisateurs malvoyants d'accéder au 
     alt: "Diagram of neuron structure",
     caption: "Figure 1: Neural connections",
     width: 800,
-    height: 600,
-    position: 2
+    height: 600
 }
 ```
 
-#### 2. **Backend (`image_analyzer.py`)**
-- **Gemini Vision** : Utilise `gemini-2.0-flash-exp` pour analyser les images
-- **Trois modes de description** :
-  - `brief` : Une phrase courte (intégration dans le flux)
-  - `detailed` : Description complète (sur demande)
-  - `contextual` : Avec relation au texte environnant
+#### 2. **Backend (`reading_agent.py`)**
 
-#### 3. **Integration (`reading_agent.py`)**
-- **Intégration automatique** : Insère les descriptions dans le contenu
-- **Gestion des demandes** : Détecte les questions sur les images
-- **Cache** : Stocke les images analysées dans `reading_state`
+##### `_clean_content_with_llm()` - **Décision Intelligente**
+- **Input** : Contenu + Liste d'images avec métadonnées + Requête utilisateur
+- **Rôle du LLM** :
+  - Analyser la pertinence de chaque image
+  - Décider où insérer les images dans le texte
+  - Insérer des placeholders `[IMAGE:N]` aux bons endroits
+- **Output** : Contenu nettoyé avec placeholders
+
+```python
+# Exemple de prompt LLM
+"""
+AVAILABLE IMAGES:
+[Image 1] Alt: Company logo, URL: logo.png
+[Image 2] Alt: Brain diagram, URL: brain.jpg
+[Image 3] Alt: Author photo, URL: author.jpg
+
+Article: "The human brain is..."
+
+User Request: "Read the full article"
+
+→ LLM Output: "The human brain is... [IMAGE:2] It contains..."
+   (Skip logo and author photo, insert brain diagram)
+"""
+```
+
+##### `_replace_image_placeholders()` - **Analyse On-Demand**
+- **Regex** : Détecte tous les `[IMAGE:N]`
+- **Analyse** : Appelle `ImageAnalyzer.analyze_image()` UNIQUEMENT pour les images référencées
+- **Remplacement** : `[IMAGE:N]` → `"Image: [description]"`
+
+#### 3. **Vision (`image_analyzer.py`)**
+- **Gemini Vision** : `gemini-2.0-flash-exp`
+- **Trois modes** :
+  - `brief` : 1 phrase courte
+  - `detailed` : Description complète
+  - `contextual` : Description adaptée au contexte de l'article ✨ **Utilisé par défaut**
+- **Cache** : Évite de réanalyser la même image
+- **Filtrage** : `should_describe_image()` ignore les images trop petites
 
 ---
 
-## 📊 Flux de Traitement
+## 📊 Flux de Traitement (Nouvelle Version)
 
 ### Scénario 1 : Lecture Normale avec Images
 
@@ -58,27 +88,53 @@ Le système d'analyse d'images permet aux utilisateurs malvoyants d'accéder au 
 
 2. content.js extrait :
    - Texte : "The brain is complex..."
-   - Images : [{url: "...", alt: "brain diagram", ...}]
+   - Images : [
+       {url: "logo.png", alt: "Company logo", width: 50, height: 50},
+       {url: "brain.jpg", alt: "Brain diagram", width: 800, height: 600},
+       {url: "author.jpg", alt: "Author photo", width: 100, height: 100}
+     ]
 
-3. reading_agent.py reçoit le contenu
+3. reading_agent._clean_content_with_llm() :
+   - LLM reçoit : Texte + Liste des 3 images + "Read this article"
+   - LLM décide : Image 1 (logo) → ignore, Image 2 (brain) → pertinent, Image 3 (author) → ignore
+   - LLM output : "The brain is complex. [IMAGE:2] It contains billions..."
 
-4. image_analyzer.py analyse les images :
-   - Mode: "brief"
-   - Contexte: Premier paragraphe
-   - Résultat: "Image: Diagram of brain structure with labeled regions"
+4. reading_agent._replace_image_placeholders() :
+   - Détecte : [IMAGE:2]
+   - Appelle : ImageAnalyzer.analyze_image(brain.jpg, mode="contextual", context="The brain is complex...")
+   - Remplace : [IMAGE:2] → "Image: Diagram showing the major regions of the brain including the cerebrum, cerebellum, and brainstem."
 
-5. Intégration dans le contenu :
-   "The brain is complex. Image: Diagram of brain structure. It contains billions..."
+5. Résultat final :
+   "The brain is complex. Image: Diagram showing the major regions of the brain. It contains billions..."
 
-6. TTS lit le tout de manière fluide
+6. TTS lit le contenu avec la description intégrée
 ```
 
-### Scénario 2 : Demande de Description Détaillée
+### Scénario 2 : Lecture Partielle
 
 ```
-1. User écoute : "...Image: Diagram of brain structure..."
+1. User: "Read the first paragraph"
 
-2. User interrompt : "Describe the diagram in detail"
+2. LLM output : "First paragraph text... [IMAGE:1]"
+   (Seulement l'image du premier paragraphe)
+
+3. ImageAnalyzer analyse UNIQUEMENT Image 1
+
+4. Temps total : ~2-3 secondes (vs 10+ si toutes les images étaient analysées)
+```
+
+### Scénario 3 : Résumé (Pas d'Images)
+
+```
+1. User: "Give me a summary"
+
+2. LLM output : "Key points: 1) ... 2) ... 3) ..."
+   (Aucun [IMAGE:N] car pas pertinent pour un résumé)
+
+3. ImageAnalyzer n'est PAS appelé
+
+4. Temps total : <1 seconde
+```
 
 3. reading_agent détecte :
    - _is_image_description_request() → True

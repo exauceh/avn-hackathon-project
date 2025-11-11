@@ -76,6 +76,13 @@ document.addEventListener('DOMContentLoaded', () => {
             return true;
         }
 
+        if (message.action === 'close_side_panel') {
+            console.log('👋 Fermeture du side panel...');
+            window.close();
+            sendResponse({ ok: true });
+            return true;
+        }
+
         if (message.action === 'recording_state_changed') {
             updateUI({
                 mode: message.mode || 'hotword',

@@ -343,6 +343,25 @@ async function handleAgentResponse(data) {
     console.log('📖 Action de lecture → Reprise automatique activée');
   }
 
+  // ✅ Détecter les messages d'au revoir et fermer le side panel
+  if (data.text) {
+    const goodbyeKeywords = ['goodbye', 'bye', 'ciao', 'see you', 'farewell', 'au revoir', 'à bientôt'];
+    const lowerText = data.text.toLowerCase();
+    const isGoodbye = goodbyeKeywords.some(keyword => lowerText.includes(keyword));
+
+    if (isGoodbye) {
+      console.log('👋 Message d\'au revoir détecté - Fermeture du side panel après l\'audio');
+      // Envoyer un message au side panel pour qu'il se ferme lui-même après l'audio
+      setTimeout(() => {
+        chrome.runtime.sendMessage({
+          action: 'close_side_panel'
+        }).catch((e) => {
+          console.log('Side panel déjà fermé ou message non reçu');
+        });
+      }, 2000);
+    }
+  }
+
   ttsState.canInterrupt = canInterrupt;
   ttsState.currentAction = data.action;
 

@@ -44,6 +44,12 @@ class ReadingAgent:
         if self.reading_state['is_reading']:
             print(f"📖 Position: {self.reading_state['current_position']}/{len(self.reading_state['content_chunks'])} chunks")
         
+        # ✅ DETECT IMAGE DESCRIPTION REQUEST (high priority)
+        if self._is_image_description_request(last_message):
+            print(f"🖼️ Image description request detected")
+            print("="*60)
+            return self._handle_image_description_request(state)
+        
         # ✅ DETECT INTERRUPTION (clarification questions)
         if self._is_clarification_request(last_message, state):
             print(f"🛑 Interruption detected → Processing clarification")
@@ -92,6 +98,119 @@ class ReadingAgent:
             print(f"❓ Clarification détectée: {message[:50]}...")
         
         return is_question
+    
+    def _is_image_description_request(self, message: str) -> bool:
+        """Détecter si l'utilisateur demande une description d'image"""
+        
+        image_keywords = [
+            'image', 'picture', 'photo', 'diagram', 'chart', 'graph',
+            'illustration', 'figure', 'visual', 'show me', 'trump'
+        ]
+        
+        action_keywords = [
+            'describe', 'explain', 'tell me about', 'what is', 'what does',
+            'show me', 'details', 'more about', 'information about',
+            'can you explain', 'what\'s in', 'analyze', 'break down',
+            'look at', 'see', 'view', 'check', 'examine', 'inspect','say'
+        ]
+        
+        message_lower = message.lower()
+        
+        has_image_keyword = any(keyword in message_lower for keyword in image_keywords)
+        has_action_keyword = any(keyword in message_lower for keyword in action_keywords)
+        
+        return has_image_keyword and has_action_keyword
+    
+    def _handle_image_description_request(self, state: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Gérer une demande de description d'image détaillée
+        
+        Exemples:
+        - "Describe the image"
+        - "Tell me more about the diagram"
+        - "Can you describe the images about Donald Trump?"
+        """
+        
+        last_message = state["messages"][-1].content
+        
+        # Vérifier si des images sont disponibles
+        if not self.reading_state.get("images"):
+            state["response_text"] = "There are no images in this article."
+            state["action"] = {"type": "info"}
+            return state
+        
+        images = self.reading_state["images"]
+        
+        print(f"🖼️ Using LLM to identify requested image from {len(images)} available images...")
+        
+        try:
+            # Créer un contexte des images disponibles pour le LLM
+            images_context = "\n".join([
+                f"{i+1}. {img.get('alt', 'Image')} - URL: {img.get('url', '')[:50]}"
+                for i, img in enumerate(images)
+            ])
+            
+            system_prompt = """You are helping identify which image a user is asking about.
+Based on the user's request and the available images, return ONLY the number (1-based index) of the most relevant image.
+If the user mentions a specific topic (like "Trump", "diagram", etc), find the image that best matches.
+Return only a single number, nothing else."""
+            
+            user_prompt = f"""User request: {last_message}
+
+Available images:
+{images_context}
+
+Which image number is the user asking about? Return only the number."""
+            
+            messages = [
+                SystemMessage(content=system_prompt),
+                HumanMessage(content=user_prompt)
+            ]
+            
+            response = self.llm.invoke(messages)
+            image_index = int(response.content.strip()) - 1  # Convert to 0-based index
+            
+            # Valider l'index
+            if image_index < 0 or image_index >= len(images):
+                print(f"⚠️ Invalid index {image_index}, defaulting to first image")
+                image_index = 0
+            
+            image = images[image_index]
+            print(f"✅ Selected image {image_index + 1}: {image.get('url', '')[:50]}...")
+            
+        except Exception as e:
+            print(f"⚠️ Error identifying image: {e}, defaulting to first image")
+            image = images[0]
+        
+        print(f"🖼️ Generating detailed description for image: {image.get('url', '')[:50]}...")
+        
+        try:
+            # Générer une description détaillée
+            context = " ".join(self.reading_state["content_chunks"][:2]) if self.reading_state["content_chunks"] else ""
+            
+            detailed_description = self.image_analyzer.analyze_image(
+                image_url=image["url"],
+                mode="detailed",
+                context=context,
+                alt_text=image.get("alt", "")
+            )
+            
+            state["response_text"] = detailed_description
+            
+        except Exception as e:
+            print(f"❌ Error generating detailed description: {e}")
+            # Fallback sur le alt text
+            state["response_text"] = image.get("alt", "Image description unavailable")
+        
+        state["action"] = {
+            "type": "image_description",
+            "image_url": image["url"],
+            "is_reading_action": True  # Permettre la reprise automatique
+        }
+        
+        state["needs_confirmation"] = False
+        
+        return state
     
     def _start_reading(self, state: Dict[str, Any]) -> Dict[str, Any]:
         """Start reading an article"""

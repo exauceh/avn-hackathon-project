@@ -25,7 +25,7 @@ class ImageAnalyzer:
         
         # Utiliser Gemini 2.0 Flash avec vision
         self.vision_model = ChatGoogleGenerativeAI(
-            model="gemini-2.5-pro",
+            model="gemini-2.5-flash",
             api_key=self.api_key,
             temperature=0.3  # Plus bas pour des descriptions factuelles
         )

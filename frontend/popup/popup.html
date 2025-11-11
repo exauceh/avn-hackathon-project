@@ -11,6 +11,17 @@
     <div id="container">
         <!-- Header avec logo et titre -->
         <div class="header">
+            <div class="header-top">
+                <button id="theme-toggle" class="theme-toggle" title="Basculer mode haut contraste"
+                    aria-label="Basculer mode haut contraste">
+                    <span class="theme-icon">🌓</span>
+                    <span class="theme-label">Contraste</span>
+                </button>
+                <button id="reset-session" class="reset-btn" title="Nouvelle session" aria-label="Nouvelle session">
+                    <span class="reset-icon">🗑️</span>
+                    <span class="reset-label">Nouvelle session</span>
+                </button>
+            </div>
             <div class="logo"><img src="../images/icon-32.svg" alt="AVN Agent Logo" /></div>
             <h1>AVN Agent</h1>
             <p class="subtitle">Assistant vocal intelligent</p>
@@ -20,10 +31,6 @@
         <div class="status-indicator">
             <span class="led" id="led-status"></span>
             <span id="connection-status">Connecté</span>
-            <button id="theme-toggle" class="theme-toggle" title="Basculer mode haut contraste"
-                aria-label="Basculer mode haut contraste">👁️</button>
-            <button id="reset-session" class="reset-btn" title="Nouvelle session"
-                aria-label="Nouvelle session">🔄</button>
         </div>
 
         <!-- Bouton Microphone Principal -->

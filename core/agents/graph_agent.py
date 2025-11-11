@@ -95,7 +95,6 @@ class AVNGraphAgent:
         workflow.add_node("router", self._route_request)
         workflow.add_node("search", self._handle_search)
         workflow.add_node("navigation", self._handle_navigation)
-        workflow.add_node("form", self._handle_form)
         workflow.add_node("reading", self._handle_reading)
         workflow.add_node("response", self._generate_response)
         
@@ -118,7 +117,6 @@ class AVNGraphAgent:
         # All agents can lead to response
         workflow.add_edge("search", "response")
         workflow.add_edge("navigation", "response")
-        workflow.add_edge("form", "response")
         workflow.add_edge("reading", "response")
         workflow.add_edge("response", END)
         
@@ -159,7 +157,7 @@ class AVNGraphAgent:
         - Use conversation history to disambiguate vague requests like "open it", "read that", "tell me more"
         - If the user asks about images, photos, pictures, or visual content, route to READING for image analysis
 
-        Respond ONLY with one of these words: SEARCH, NAVIGATION, FORM, READING, or RESPONSE
+        Respond ONLY with one of these words: SEARCH, NAVIGATION, READING, or RESPONSE
         """
         
         # Include conversation history for context
@@ -203,10 +201,6 @@ class AVNGraphAgent:
         print("🧭 Executing NavigationAgent...")
         return self.navigation_agent.process(state)
     
-    def _handle_form(self, state: AgentState) -> AgentState:
-        """Delegate to FormAgent"""
-        print("📝 Executing FormAgent...")
-        return self.form_agent.process(state)
     
     def _handle_reading(self, state: AgentState) -> AgentState:
         """Delegate to ReadingAgent"""
@@ -226,6 +220,7 @@ class AVNGraphAgent:
         system_prompt = """
         You are AVN, a voice assistant for visually impaired people.
         Respond concisely and clearly. Always mention the actions you have performed.
+        Use simple ponctuaction (no asterix)
         """
         
         # Include conversation history for context

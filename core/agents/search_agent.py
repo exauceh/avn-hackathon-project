@@ -8,6 +8,7 @@ import requests
 from langchain_core.messages import SystemMessage, HumanMessage
 from googleapiclient.discovery import build
 import os
+import urllib.parse
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -47,10 +48,13 @@ class SearchAgent:
             state["response_text"] = summary
             state["needs_confirmation"] = True
             
-            # No DOM action for now, just informational
+            # ✅ Navigate to Google search results for visual anchor
+            google_search_url = f"https://www.google.com/search?q={urllib.parse.quote(last_message)}"
             state["action"] = {
-                "type": "info",
-                "data": search_results
+                "type": "navigate",
+                "url": google_search_url,
+                "open_in_new_tab": False,
+                "data": search_results  # Keep search results in action for reference
             }
             
         except Exception as e:

@@ -412,9 +412,16 @@ async function executeAgentAction(action) {
       case 'navigate':
         if (action.url) {
           const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-          if (tabs && tabs[0]) {
+
+          // ✅ Support for open_in_new_tab option
+          if (action.open_in_new_tab === true) {
+            console.log(`🔗 Ouverture dans un nouvel onglet: ${action.url}`);
+            await chrome.tabs.create({ url: action.url });
+          } else if (tabs && tabs[0]) {
+            console.log(`🔗 Navigation dans l'onglet actuel: ${action.url}`);
             await chrome.tabs.update(tabs[0].id, { url: action.url });
           } else {
+            console.log(`🔗 Création d'un nouvel onglet (pas d'onglet actif): ${action.url}`);
             await chrome.tabs.create({ url: action.url });
           }
         } else if (action.method === 'back') {

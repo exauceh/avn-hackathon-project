@@ -465,7 +465,7 @@ window.startListening = function () {
 document.addEventListener('DOMContentLoaded', () => {
     console.log('🚀 Initialisation de l\'écoute active directe');
     setTimeout(() => {
-        playHumSound(); // ✅ Jouer le son "hum"
+        speakMessage("Hi, I'm AVN. How can I help you?", true);
         window.startListening();
     }, 500);
 });

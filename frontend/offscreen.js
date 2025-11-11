@@ -3,8 +3,10 @@ let pausedAudio = null;
 let pausedTime = 0;
 let fadeOutInterval = null;
 let silenceTimer = null;
-let isReading = false;  // Flag simple : est-ce une action de lecture ?
+let isReading = false;
 
+
+// Flag simple : est-ce une action de lecture ?
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.target !== 'offscreen') return true;
 
@@ -22,7 +24,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             handleUserSpeaking();
             break;
     }
-
     sendResponse({ success: true });
     return true;
 });

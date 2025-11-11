@@ -6,6 +6,7 @@ Use case: Conversational reading with clarifications
 import re
 from typing import Dict, Any, List
 from langchain_core.messages import SystemMessage, HumanMessage
+from image_analyzer import ImageAnalyzer
 
 
 class ReadingAgent:
@@ -13,12 +14,14 @@ class ReadingAgent:
     
     def __init__(self, llm):
         self.llm = llm
+        self.image_analyzer = ImageAnalyzer()  # ✅ Ajout de l'analyseur d'images
         self.reading_state = {
             "is_reading": False,
             "article_url": None,
             "article_title": None,
             "current_position": 0,
             "content_chunks": [],
+            "images": [],  # ✅ Stocker les images avec descriptions
             "paused": False
         }
     
@@ -41,8 +44,13 @@ class ReadingAgent:
         if self.reading_state['is_reading']:
             print(f"📖 Position: {self.reading_state['current_position']}/{len(self.reading_state['content_chunks'])} chunks")
         
-        # ✅ DETECT INTERRUPTION FIRST
-        # Check if it's a clarification BEFORE checking other intents
+        # ✅ DETECT IMAGE DESCRIPTION REQUEST FIRST (high priority)
+        if self._is_image_description_request(last_message):
+            print(f"🖼️ Image description request detected")
+            print("="*60)
+            return self._handle_image_description_request(state)
+        
+        # ✅ DETECT INTERRUPTION (clarification questions)
         if self._is_clarification_request(last_message, state):
             print(f"🛑 Interruption detected → Processing clarification")
             print("="*60)
@@ -115,13 +123,38 @@ class ReadingAgent:
             state["needs_confirmation"] = False
             return state
         
+        # ✅ Extraire et analyser les images
+        images = page_content.get("images", [])
+        enriched_images = []
+        
+        if images:
+            print(f"🖼️ Found {len(images)} images, analyzing...")
+            try:
+                # Analyser les images en mode brief pour l'intégration dans le flux
+                enriched_images = self.image_analyzer.analyze_multiple_images(
+                    images,
+                    mode="brief",
+                    context=raw_content[:1000]  # Contexte limité
+                )
+                print(f"✨ {len(enriched_images)} images analyzed successfully")
+            except Exception as e:
+                print(f"⚠️ Error analyzing images: {e}")
+                enriched_images = images  # Garder les images brutes
+        
         # ✅ UTILISER LE LLM POUR NETTOYER ET STRUCTURER LE CONTENU
         print(f"🤖 Using LLM to clean and structure content...")
-        cleaned_content = self._clean_content_with_llm(raw_content, page_title,last_message)
+        cleaned_content = self._clean_content_with_llm(raw_content, page_title, last_message)
         
         if not cleaned_content or len(cleaned_content) < 50:
             print(f"⚠️ Cleaned content too short, using raw content")
             cleaned_content = raw_content
+        
+        # ✅ Intégrer les descriptions d'images dans le contenu
+        if enriched_images:
+            cleaned_content = self._integrate_images_in_content(
+                cleaned_content,
+                enriched_images
+            )
         
         # Split content into readable chunks
         chunks = self._split_into_chunks(cleaned_content, chunk_size=500)
@@ -133,6 +166,7 @@ class ReadingAgent:
             "article_title": page_title,
             "current_position": 0,
             "content_chunks": chunks,
+            "images": enriched_images,  # ✅ Stocker les images pour référence ultérieure
             "paused": False
         }
         
@@ -290,6 +324,135 @@ class ReadingAgent:
         print(f"📄 Content preview: {full_content[:200]}...")
         
         return full_content
+    
+    def _integrate_images_in_content(
+        self,
+        text_content: str,
+        images: List[Dict[str, Any]]
+    ) -> str:
+        """
+        Intégrer les descriptions d'images dans le contenu textuel
+        
+        Args:
+            text_content: Contenu textuel nettoyé
+            images: Liste des images avec leurs descriptions
+        
+        Returns:
+            Contenu avec images intégrées de manière naturelle
+        """
+        
+        if not images:
+            return text_content
+        
+        # Diviser le contenu en paragraphes
+        paragraphs = text_content.split('\n\n')
+        
+        # Calculer où insérer les images (répartition équitable)
+        total_paragraphs = len(paragraphs)
+        total_images = len(images)
+        
+        if total_images == 0:
+            return text_content
+        
+        # Insérer une image tous les N paragraphes
+        insert_interval = max(total_paragraphs // (total_images + 1), 1)
+        
+        result_parts = []
+        image_index = 0
+        
+        for i, paragraph in enumerate(paragraphs):
+            result_parts.append(paragraph)
+            
+            # Insérer une image selon l'intervalle
+            if (i + 1) % insert_interval == 0 and image_index < total_images:
+                image = images[image_index]
+                
+                # Vérifier si l'image doit être décrite
+                if self.image_analyzer.should_describe_image(image):
+                    description = image.get("description", "")
+                    if description:
+                        result_parts.append(f"\n{description}\n")
+                
+                image_index += 1
+        
+        # Ajouter les images restantes à la fin
+        while image_index < total_images:
+            image = images[image_index]
+            if self.image_analyzer.should_describe_image(image):
+                description = image.get("description", "")
+                if description:
+                    result_parts.append(f"\n{description}\n")
+            image_index += 1
+        
+        return "\n\n".join(result_parts)
+    
+    def _is_image_description_request(self, message: str) -> bool:
+        """Détecter si l'utilisateur demande une description d'image"""
+        
+        image_keywords = [
+            'image', 'picture', 'photo', 'diagram', 'chart', 'graph',
+            'illustration', 'figure', 'visual', 'show me'
+        ]
+        
+        action_keywords = ['describe', 'explain', 'tell me about', 'what is', 'what does']
+        
+        message_lower = message.lower()
+        
+        has_image_keyword = any(keyword in message_lower for keyword in image_keywords)
+        has_action_keyword = any(keyword in message_lower for keyword in action_keywords)
+        
+        return has_image_keyword and has_action_keyword
+    
+    def _handle_image_description_request(self, state: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Gérer une demande de description d'image détaillée
+        
+        Exemples:
+        - "Describe the image"
+        - "Tell me more about the diagram"
+        - "What does the chart show?"
+        """
+        
+        last_message = state["messages"][-1].content
+        
+        # Trouver l'image la plus récente
+        if not self.reading_state.get("images"):
+            state["response_text"] = "There are no images in this article."
+            state["action"] = {"type": "info"}
+            return state
+        
+        # Pour l'instant, décrire la dernière image mentionnée ou la première
+        image = self.reading_state["images"][0]
+        
+        print(f"🖼️ Generating detailed description for image: {image.get('url', '')[:50]}...")
+        
+        try:
+            # Générer une description détaillée
+            context = " ".join(self.reading_state["content_chunks"][:2])
+            
+            detailed_description = self.image_analyzer.analyze_image(
+                image_url=image["url"],
+                mode="detailed",
+                context=context,
+                alt_text=image.get("alt", "")
+            )
+            
+            state["response_text"] = detailed_description
+            
+        except Exception as e:
+            print(f"❌ Error generating detailed description: {e}")
+            # Fallback sur la description brève
+            state["response_text"] = image.get("description", "Image description unavailable")
+        
+        state["action"] = {
+            "type": "image_description",
+            "image_url": image["url"],
+            "is_reading_action": True  # Permettre la reprise
+        }
+        
+        state["needs_confirmation"] = False
+        
+        return state
     
     def _split_into_chunks(self, text: str, chunk_size: int = 500) -> List[str]:
         """

@@ -134,7 +134,7 @@ class AVNGraphAgent:
         # Create a prompt for the router
         system_prompt = """
         You are an intelligent router for a voice assistant.
-        Analyze the user's request and determine which action to perform:
+        Analyze the user's request AND the conversation history to determine which action to perform:
 
         - SEARCH: If the user requests a search (e.g., "search for", "find information about", "look up") or wants to know about recent/current information.
         - NAVIGATION: If the user wants to navigate to or open a website/page/article. This includes:
@@ -142,9 +142,19 @@ class AVNGraphAgent:
           * Generic site navigation (e.g., "open YouTube", "visit BBC News")
           * Navigating to search results (e.g., "open the first article", "go to the second result", "read the third link")
           * Following links from current page (e.g., "click on about us", "go to the next page","scroll down)
-        - FORM: If the user wants to fill out, submit, or interact with a form (e.g., "register", "sign up", "fill the email field", "submit the form")
-        - READING: If the user wants to read content, asks for clarification during reading, or wants to resume (e.g., "read this article", "what is X?", "continue reading", "resume", "explain that", "read more")
+        - READING: If the user wants to interact with content. This includes:
+          * Reading content (e.g., "read this article", "read the page", "what does it say")
+          * Content comprehension (e.g., "what is X?", "explain that", "summarize this", "what does that mean")
+          * Reading control (e.g., "continue reading", "resume", "read more", "keep going", "next paragraph")
+          * Asking questions about current content (e.g., "who wrote this?", "when was this published?", "tell me about...")
+          * Follow-up questions about previously discussed content
         - RESPONSE: For general questions, confirmations, greetings, or requests that don't fit the above categories
+
+        IMPORTANT - Context awareness:
+        - If the user asks a follow-up question (e.g., "what about that?", "tell me more", "explain"), check recent messages to understand what they're referring to
+        - If previous messages show search results or navigation to a page, and the user asks questions, it's likely READING
+        - If the conversation shows the user was reading something and they say "continue" or ask question about the content, use READING
+        - Use conversation history to disambiguate vague requests like "open it", "read that", "tell me more"
 
         Respond ONLY with one of these words: SEARCH, NAVIGATION, FORM, READING, or RESPONSE
         """

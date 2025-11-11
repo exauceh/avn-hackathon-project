@@ -108,16 +108,24 @@ async function getPageContext() {
     console.log('Content script déjà injecté');
   }
 
+  // Attendre que la page soit complètement chargée
+  try {
+    await waitForTabLoaded(tab.id, 3000);
+  } catch (e) {
+    console.log('Timeout attente chargement, on continue...');
+  }
+
   try {
     const response = await chrome.tabs.sendMessage(tab.id, {
       action: 'get_dom_content'
     });
 
     if (response && response.content) {
+      console.log(`📄 Contenu récupéré: ${response.content.main_sections.length} sections`);
       return response.content;
     }
   } catch (e) {
-    console.warn("Impossible de récupérer le contenu");
+    console.warn("Impossible de récupérer le contenu:", e);
   }
 
   return {
@@ -126,6 +134,29 @@ async function getPageContext() {
     main_sections: [],
     forms: []
   };
+}
+
+async function waitForTabLoaded(tabId, timeout = 3000) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('Timeout')), timeout);
+
+    const checkStatus = async () => {
+      try {
+        const tab = await chrome.tabs.get(tabId);
+        if (tab.status === 'complete') {
+          clearTimeout(timer);
+          resolve();
+        } else {
+          setTimeout(checkStatus, 100);
+        }
+      } catch (e) {
+        clearTimeout(timer);
+        reject(e);
+      }
+    };
+
+    checkStatus();
+  });
 }
 
 async function sendTranscriptionToServer(transcription, isInterruption = false) {

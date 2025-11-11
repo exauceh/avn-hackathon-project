@@ -49,7 +49,7 @@ class SearchAgent:
             state["needs_confirmation"] = True
             
             # ✅ Navigate to Google search results for visual anchor
-            google_search_url = f"https://www.google.com/search?q={urllib.parse.quote(last_message)}"
+            google_search_url = f"https://www.google.com/search?q={urllib.parse.quote(last_message)}&lr=lang_en&hl=en"
             state["action"] = {
                 "type": "navigate",
                 "url": google_search_url,
@@ -88,7 +88,7 @@ class SearchAgent:
                 cx=CUSTOM_SEARCH_CX,
                 lr='lang_en', # Limit search to French results
                 num=num_results, # Number of results
-                dateRestrict='7d'
+                # dateRestrict='7d'
             ).execute()
 
             results = []

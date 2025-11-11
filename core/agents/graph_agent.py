@@ -106,7 +106,6 @@ class AVNGraphAgent:
             {
                 "search": "search",
                 "navigation": "navigation",
-                "form": "form",
                 "reading": "reading",
                 "response": "response"
             }

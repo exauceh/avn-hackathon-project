@@ -16,7 +16,6 @@ from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 # Import specialized agents
 from search_agent import SearchAgent
 from navigation_agent import NavigationAgent
-from form_agent import FormAgent
 from reading_agent import ReadingAgent
 
 load_dotenv()
@@ -79,7 +78,6 @@ class AVNGraphAgent:
         # Initialize specialized agents
         self.search_agent = SearchAgent(self.llm)
         self.navigation_agent = NavigationAgent(self.llm)
-        self.form_agent = FormAgent(self.llm)
         self.reading_agent = ReadingAgent(self.llm)
         
         # Build the graph
@@ -177,7 +175,6 @@ class AVNGraphAgent:
         agent_map = {
             "SEARCH": "search",
             "NAVIGATION": "navigation",
-            "FORM": "form",
             "READING": "reading",
             "RESPONSE": "response"
         }
